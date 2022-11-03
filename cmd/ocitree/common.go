@@ -26,4 +26,3 @@ func containersStore() (storage.Store, error) {
 
 	return storage.GetStore(storeOptions)
 }
-
