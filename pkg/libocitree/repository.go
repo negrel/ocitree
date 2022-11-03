@@ -46,3 +46,18 @@ func (r *Repository) Name() (string, error) {
 	return "", errRepositoryCorruptedNoName
 }
 
+// Commits returns the commits history of this repository.
+func (r *Repository) Commits() ([]Commit, error) {
+	history, err := r.image.History(context.Background())
+	if err != nil {
+		return nil, fmt.Errorf("failed to retrieve history from image: %w", err)
+	}
+
+	commits := make([]Commit, len(history))
+	for i, h := range history {
+		commits[i] = newCommit(h)
+	}
+
+	return commits, nil
+}
+
