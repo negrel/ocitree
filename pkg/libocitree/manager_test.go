@@ -30,11 +30,29 @@ func TestManagerClone(t *testing.T) {
 	clonedRepo, err := manager.Clone("alpine:latest")
 	require.NoError(t, err)
 
-
 	// Repository exists now, again using a similar name
 	repo, err := manager.Repository("docker.io/alpine")
 	require.NoError(t, err)
 	require.Equal(t, clonedRepo.ID(), repo.ID())
+}
+
+func TestManagerListRepository(t *testing.T) {
+	manager, cleanup := newTestManager(t)
+	defer cleanup()
+
+	repos, err := manager.Repositories()
+	require.NoError(t, err)
+	require.Len(t, repos, 0)
+
+	// Clone the repository using an equivalent name.
+	clonedRepo, err := manager.Clone("alpine:latest")
+	require.NoError(t, err)
+
+	repos, err = manager.Repositories()
+	require.NoError(t, err)
+	require.Len(t, repos, 1)
+
+	require.Equal(t, clonedRepo.ID(), repos[0].ID())
 }
 
 func newTestManager(t *testing.T) (manager *Manager, cleanup func()) {
