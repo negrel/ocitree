@@ -8,7 +8,7 @@ import (
 )
 
 func TestParseRemoteRepoReference(t *testing.T) {
-	errInvalidReferenceFormat := fmt.Errorf("failed to parse image reference: invalid reference format")
+	errInvalidReferenceFormat := fmt.Errorf("failed to parse repository reference: invalid reference format")
 
 	for _, test := range []struct {
 		ref           string
@@ -49,7 +49,7 @@ func TestParseRemoteRepoReference(t *testing.T) {
 }
 
 func TestParseRepoReference(t *testing.T) {
-	errInvalidReferenceFormat := fmt.Errorf("failed to parse image reference: invalid reference format")
+	errInvalidReferenceFormat := fmt.Errorf("failed to parse repository reference: invalid reference format")
 
 	for _, test := range []struct {
 		ref           string
@@ -90,7 +90,7 @@ func TestParseRepoReference(t *testing.T) {
 }
 
 func TestParseRepoName(t *testing.T) {
-	errInvalidReferenceFormat := fmt.Errorf("failed to parse image reference: invalid reference format")
+	errInvalidReferenceFormat := fmt.Errorf("failed to parse repository name: invalid reference format")
 
 	for _, test := range []struct {
 		ref           string
@@ -109,14 +109,14 @@ func TestParseRepoName(t *testing.T) {
 		{"/ubuntu:latest", errInvalidReferenceFormat},
 		{"/ubuntu:22.04", errInvalidReferenceFormat},
 	
-		{"docker.io/library/ubuntu:latest", ErrRepoNameContainsTag},
-		{"docker.io/library/ubuntu:22.04", ErrRepoNameContainsTag},
-		{"docker.io/library/ubuntu:22.04@sha256:a428de44a9059f31a59237a5881c2d2cffa93757d99026156e4ea544577ab7f3", ErrRepoNameContainsTag},
-		{"docker.io/library/ubuntu@sha256:a428de44a9059f31a59237a5881c2d2cffa93757d99026156e4ea544577ab7f3", ErrRepoNameContainsDigest},
-		{"ubuntu:latest", ErrRepoNameContainsTag},
-		{"ubuntu:22.04", ErrRepoNameContainsTag},
-		{"library/ubuntu:latest", ErrRepoNameContainsTag},
-		{"library/ubuntu:22.04", ErrRepoNameContainsTag},
+		{"docker.io/library/ubuntu:latest", ErrRepoNameContainsTagOrDigest},
+		{"docker.io/library/ubuntu:22.04", ErrRepoNameContainsTagOrDigest},
+		{"docker.io/library/ubuntu:22.04@sha256:a428de44a9059f31a59237a5881c2d2cffa93757d99026156e4ea544577ab7f3", ErrRepoNameContainsTagOrDigest},
+		{"docker.io/library/ubuntu@sha256:a428de44a9059f31a59237a5881c2d2cffa93757d99026156e4ea544577ab7f3", ErrRepoNameContainsTagOrDigest},
+		{"ubuntu:latest", ErrRepoNameContainsTagOrDigest},
+		{"ubuntu:22.04", ErrRepoNameContainsTagOrDigest},
+		{"library/ubuntu:latest", ErrRepoNameContainsTagOrDigest},
+		{"library/ubuntu:22.04", ErrRepoNameContainsTagOrDigest},
 	} {
 		t.Run(test.ref, func(t *testing.T) {
 			_, err := ParseRepoName(test.ref)
