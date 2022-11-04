@@ -43,14 +43,13 @@ var cloneCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
-		repo, err := manager.CloneByNamedRef(repoRef)
+		err = manager.CloneByNamedRef(repoRef)
 		if err != nil {
 			logrus.Errorf("failed to clone repository %q: %v", repoRef, err)
 			os.Exit(1)
 		}
 
-		logrus.Infof("Repository %q successfully cloned.", repoRef.Name())
-		fmt.Println(repo.ID())
+		fmt.Printf("Repository %q successfully cloned.\n", repoRef.Name())
 
 		return nil
 	},
