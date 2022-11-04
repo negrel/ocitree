@@ -8,8 +8,7 @@ import (
 )
 
 var (
-	ErrRepoNameContainsTag                = errors.New("repository name can't contain any tag")
-	ErrRepoNameContainsDigest                = errors.New("repository name can't contain any digest")
+	ErrRepoNameContainsTagOrDigest        = errors.New("repository name can't contain any tag or digest")
 	ErrRepoReferenceIsNotNamed            = errors.New("repository reference is not a named reference")
 	ErrRemoteRepoReferenceContainsHeadTag = errors.New("remote repository reference contains a HEAD tag")
 )
@@ -31,16 +30,21 @@ func ParseRepoReference(ref string) (reference.Named, error) {
 // ParseRepoName parses the given repository name and returns if it is a valid name.
 // An error is returned if the reference is tagged.
 func ParseRepoName(repoName string) (reference.Named, error) {
-	repoRef, err := ParseRepoReference(repoName)
+	repoRef, err := parseRepoName(repoName)
 	if err != nil {
 		return nil, err
 	}
 
-	if err := validRepoName(repoRef); err != nil {
+	repoNamedRef, isNamed := repoRef.(reference.Named)
+	if !isNamed {
+		return nil, ErrRepoReferenceIsNotNamed
+	}
+
+	if err := validRepoName(repoNamedRef); err != nil {
 		return nil, err
 	}
 
-	return repoRef, nil
+	return repoNamedRef, nil
 }
 
 // ParseRemoteRepoReference parses the given remote repository reference and returns it if valid.
@@ -58,22 +62,27 @@ func ParseRemoteRepoReference(ref string) (reference.Named, error) {
 	return repoRef, nil
 }
 
-func parseRef(refStr string) (reference.Reference, error) {
+func parseRef(refStr string) (reference.Named, error) {
 	ref, err := reference.ParseNormalizedNamed(refStr)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse image reference: %w", err)
+		return nil, fmt.Errorf("failed to parse repository reference: %w", err)
+	}
+
+	return ref, nil
+}
+
+func parseRepoName(repoName string) (reference.Reference, error) {
+	ref, err := reference.ParseAnyReference(repoName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse repository name: %w", err)
 	}
 
 	return ref, nil
 }
 
 func validRepoName(named reference.Named) error {
-	if _, isTagged := named.(reference.Tagged); isTagged {
-		return ErrRepoNameContainsTag
-	}
-
-	if _, isDigested := named.(reference.Digested); isDigested {
-		return ErrRepoNameContainsDigest
+	if !reference.IsNameOnly(named) {
+		return ErrRepoNameContainsTagOrDigest
 	}
 
 	return nil
