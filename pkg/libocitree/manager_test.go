@@ -23,17 +23,40 @@ func TestManagerClone(t *testing.T) {
 	defer cleanup()
 
 	// Repository doesn't exist
-	_, err := manager.Repository("docker.io/library/alpine")
+	repo, err := manager.Repository("docker.io/library/alpine")
 	require.Error(t, err)
+	require.Nil(t, repo)
 
-	// Clone the repository using an equivalent name.
-	clonedRepo, err := manager.Clone("alpine:latest")
+	// Clone the repository using an equivalent name
+	err = manager.Clone("alpine:3.15")
+	require.NoError(t, err)
+
+	// Get cloned repository
+	repo3_15, err := manager.Repository("alpine")
 	require.NoError(t, err)
 
 	// Repository exists now, again using a similar name
-	repo, err := manager.Repository("docker.io/alpine")
+	img3_15, err := manager.lookupImage("docker.io/alpine:HEAD")
 	require.NoError(t, err)
-	require.Equal(t, clonedRepo.ID(), repo.ID())
+	require.Equal(t, repo3_15.ID(), img3_15.ID())
+
+	t.Run("RepositoryAlreadyExist", func(t *testing.T) {
+		// Cloning another reference to the same repo
+		err := manager.Clone("alpine:3.16")
+		require.NoError(t, err)
+
+		img3_16, err := manager.lookupImage("docker.io/library/alpine:3.16")
+		require.NoError(t, err)
+
+		// Ensure id differs
+		require.NotEqual(t, img3_16.ID(), repo3_15.ID())
+
+		// Ensure HEAD hasn't moved
+		repo, err := manager.Repository("alpine")
+		require.NoError(t, err)
+		require.NotEqual(t, img3_16.ID(), repo.ID())
+		require.Equal(t, img3_15.ID(), repo.ID())
+	})
 }
 
 func TestManagerListRepository(t *testing.T) {
@@ -44,8 +67,12 @@ func TestManagerListRepository(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, repos, 0)
 
-	// Clone the repository using an equivalent name.
-	clonedRepo, err := manager.Clone("alpine:latest")
+	// Clone the repository
+	err = manager.Clone("alpine:latest")
+	require.NoError(t, err)
+
+	// Get cloned repository
+	clonedRepo, err := manager.Repository("alpine")
 	require.NoError(t, err)
 
 	repos, err = manager.Repositories()
@@ -53,6 +80,32 @@ func TestManagerListRepository(t *testing.T) {
 	require.Len(t, repos, 1)
 
 	require.Equal(t, clonedRepo.ID(), repos[0].ID())
+}
+
+func TestManagerCheckout(t *testing.T) {
+	manager, cleanup := newTestManager(t)
+	defer cleanup()
+
+	// Clone the repository
+	err := manager.Clone("alpine:latest")
+	require.NoError(t, err)
+
+	// Get cloned repository
+	clonedRepo, err := manager.Repository("alpine")
+	require.NoError(t, err)
+
+	// Checkout to a remote reference not in local storage should fail
+	err = manager.Checkout("alpine:3.15")
+	require.Error(t, err)
+	// Clone remote reference
+	err = manager.Clone("alpine:3.15")
+	require.NoError(t, err)
+
+	// Checkout local reference
+	err = manager.Checkout("alpine:3.15")
+	require.NoError(t, err)
+
+	_ = clonedRepo
 }
 
 func newTestManager(t *testing.T) (manager *Manager, cleanup func()) {
