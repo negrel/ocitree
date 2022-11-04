@@ -6,6 +6,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/docker/go-units"
 	"github.com/negrel/ocitree/pkg/libocitree"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
@@ -58,7 +59,7 @@ var logCmd = &cobra.Command{
 
 		fmt.Println(repoName.Name())
 		for _, commit := range commits {
-			fmt.Printf("commit %v %v\n", commit.ID(), commit.Tags())
+			fmt.Printf("commit %v (%v) %v\n", commit.ID(), units.BytesSize(float64(commit.Size())), commit.Tags())
 			fmt.Printf("Date %v\n", commit.CreationDate().Format(time.RubyDate))
 			if comment := commit.Comment(); comment != "" {
 				fmt.Printf("	%v\n", commit.Comment())
