@@ -35,6 +35,37 @@ func (r *Repository) Name() (string, error) {
 		return "", fmt.Errorf("failed to retrieve repository names: %w", err)
 	}
 
+	return findRepoName(names)
+}
+
+// Tags returns other tags pointing to the same commit as HEAD.
+func (r *Repository) Tags() ([]string, error) {
+	names, err := r.image.NamedRepoTags()
+	if err != nil {
+		return nil, fmt.Errorf("failed to retrieve repository names: %w", err)
+	}
+
+	repoName, err := findRepoName(names)
+	if err != nil {
+		return nil, err
+	}
+
+	tags := make([]string, 0)
+
+	for _, name := range names {
+		if name.Name() == repoName {
+			if tagged, isTagged := name.(reference.Tagged); isTagged {
+				if t := tagged.Tag(); t != HeadTag {
+					tags = append(tags, t)
+				}
+			}
+		}
+	}
+
+	return tags, nil
+}
+
+func findRepoName(names []reference.Named) (string, error) {
 	for _, name := range names {
 		if tagged, isTagged := name.(reference.NamedTagged); isTagged {
 			if tagged.Tag() == "HEAD" {
@@ -60,4 +91,3 @@ func (r *Repository) Commits() ([]Commit, error) {
 
 	return commits, nil
 }
-
