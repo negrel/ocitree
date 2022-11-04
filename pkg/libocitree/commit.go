@@ -32,7 +32,7 @@ func (c *Commit) Tags() []string {
 	return c.history.Tags
 }
 
-// CreatedBy returns the operations that created this commit. 
+// CreatedBy returns the operations that created this commit.
 func (c *Commit) CreatedBy() string {
 	return c.history.CreatedBy
 }
@@ -40,4 +40,15 @@ func (c *Commit) CreatedBy() string {
 // CreationDate returns the creation date of the commit.
 func (c *Commit) CreationDate() *time.Time {
 	return c.history.Created
+}
+
+// Empty returns true if this commit doesn't correspond to an actual layer
+// in rootfs.
+func (c *Commit) Empty() bool {
+	return c.history.Size == 0
+}
+
+// Size returns the size of rootfs change contained in this commit.
+func (c *Commit) Size() int64 {
+	return c.history.Size
 }
