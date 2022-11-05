@@ -91,3 +91,13 @@ func (r *Repository) Commits() ([]Commit, error) {
 
 	return commits, nil
 }
+
+// Mount mounts the repository and returns the mountpoint.
+func (r *Repository) Mount() (string, error) {
+	return r.image.Mount(context.Background(), []string{}, "")
+}
+
+// Unmount unmount the repository.
+func (r *Repository) Unmount() (error) {
+	return r.image.Unmount(true)
+}
