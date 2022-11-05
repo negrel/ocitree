@@ -9,9 +9,9 @@ import (
 var storeOptions = types.StoreOptions{}
 
 func setupStoreOptionsFlags(flagset *pflag.FlagSet) {
-	flagset.StringVarP(&storeOptions.RunRoot, "run", "R", storeOptions.RunRoot, "Root of the runtime state tree")
-	flagset.StringVarP(&storeOptions.GraphRoot, "graph", "g", storeOptions.GraphRoot, "Root of the storage tree")
-	flagset.StringVarP(&storeOptions.GraphDriverName, "storage-driver", "s", storeOptions.GraphDriverName, "Storage driver to use")
+	flagset.StringVarP(&storeOptions.RunRoot, "run", "R", storeOptions.RunRoot, "root of the runtime state tree")
+	flagset.StringVarP(&storeOptions.GraphRoot, "graph", "g", storeOptions.GraphRoot, "root of the storage tree")
+	flagset.StringVarP(&storeOptions.GraphDriverName, "storage-driver", "s", storeOptions.GraphDriverName, "storage driver to use")
 }
 
 func containersStore() (storage.Store, error) {

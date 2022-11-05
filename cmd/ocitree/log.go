@@ -20,8 +20,8 @@ func init() {
 
 var logCmd = &cobra.Command{
 	Use:   "log",
-	Short: "Show commit logs",
-	RunE: func(cobracCmd *cobra.Command, args []string) error {
+	Short: "Show commit logs.",
+	RunE: func(cmd *cobra.Command, args []string) error {
 		if len(args) == 0 {
 			return errors.New("a repository name must be specified")
 		}

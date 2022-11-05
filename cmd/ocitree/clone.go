@@ -19,7 +19,7 @@ func init() {
 var cloneCmd = &cobra.Command{
 	Use:   "clone",
 	Short: "Clone a remote repository to local storage.",
-	RunE: func(cobracCmd *cobra.Command, args []string) error {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		if len(args) == 0 {
 			return errors.New("a repository name must be specified")
 		}
