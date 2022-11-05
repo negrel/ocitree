@@ -138,9 +138,30 @@ func (m *Manager) CloneByNamedRef(named reference.Named) error {
 		alreadyExist = true
 	}
 
+	err := m.pullRef(named)
+	if err != nil {
+		return err
+	}
+
+	img, err := m.lookupImage(named.String())
+	if err != nil {
+		return fmt.Errorf("failed to retrieve repository after pulling image %q: %w", named.Name(), err)
+	}
+
+	if !alreadyExist {
+		err = m.store.AddNames(img.ID(), []string{named.Name() + ":" + HeadTag})
+		if err != nil {
+			return fmt.Errorf("failed to create repository from image %q: %v", named.String(), err)
+		}
+	}
+
+	return nil
+}
+
+func (m *Manager) pullRef(repoRef reference.Reference) error {
 	maxRetries := uint(3)
 	retryDelay := time.Second
-	_, err := m.runtime.Pull(context.Background(), named.String(), config.PullPolicyNewer, &libimage.PullOptions{
+	_, err := m.runtime.Pull(context.Background(), repoRef.String(), config.PullPolicyNewer, &libimage.PullOptions{
 		CopyOptions: libimage.CopyOptions{
 			SystemContext:                    m.runtime.SystemContext(),
 			SourceLookupReferenceFunc:        nil,
@@ -178,23 +199,7 @@ func (m *Manager) CloneByNamedRef(named reference.Named) error {
 		},
 		AllTags: false,
 	})
-	if err != nil {
-		return err
-	}
-
-	img, err := m.lookupImage(named.String())
-	if err != nil {
-		return fmt.Errorf("failed to retrieve repository after pulling image %q: %w", named.Name(), err)
-	}
-
-	if !alreadyExist {
-		err = m.store.AddNames(img.ID(), []string{named.Name() + ":" + HeadTag})
-		if err != nil {
-			return fmt.Errorf("failed to create repository from image %q: %v", named.String(), err)
-		}
-	}
-
-	return nil
+	return err
 }
 
 // Checkout moves repository's HEAD to the given reference.
@@ -226,4 +231,60 @@ func (m *Manager) CheckoutByRef(ref reference.Named) error {
 	}
 
 	return nil
+}
+
+// Fetch updates every repository reference.
+func (m *Manager) Fetch(refStr string) error {
+	ref, err := ParseRemoteRepoReference(refStr)
+	if err != nil {
+		return fmt.Errorf("failed to parse repository name: %w", err)
+	}
+
+	return m.FetchByNamedRef(ref)
+}
+
+// FetchByNamedRef updates every repository reference.
+func (m *Manager) FetchByNamedRef(named reference.Named) error {
+	repo, _ := m.Repository(named.Name())
+	if repo == nil {
+		return fmt.Errorf("repository not found")
+	}
+
+	// List images with same name as repository
+	images, err := m.runtime.ListImages(context.Background(), []string{}, &libimage.ListImagesOptions{
+		Filters: []string{"reference=" + named.Name() + ":*"},
+	})
+	if err != nil {
+		return fmt.Errorf("failed to list references to repository: %w", err)
+	}
+
+	// Updates every reference
+	// For every images matching the repository name
+	for _, img := range images {
+		// Iterate over every name of this image
+		for _, name := range img.Names() {
+			ref, err := ParseRemoteRepoReference(name)
+			// Filter HEAD reference
+			if err == ErrRemoteRepoReferenceContainsHeadTag {
+				continue
+			}
+			if err != nil {
+				return err
+			}
+
+			// Filter name that don't match repository name
+			if ref.Name() != named.Name() {
+				continue
+			}
+
+			// Pull reference
+			err = m.pullRef(ref)
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	// Now pull the given reference
+	return m.pullRef(named)
 }
