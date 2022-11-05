@@ -20,7 +20,7 @@ var unshareCmd = &cobra.Command{
 	RunE:  runUnshare,
 }
 
-func runUnshare(cobracCmd *cobra.Command, args []string) error {
+func runUnshare(cobraCmd *cobra.Command, args []string) error {
 	if isRootless := unshare.IsRootless(); !isRootless {
 		logrus.Error("please use unshare with rootless")
 		os.Exit(1)

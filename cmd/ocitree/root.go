@@ -11,7 +11,7 @@ import (
 
 func init() {
 	pflag := rootCmd.PersistentFlags()
-	pflag.VarP(LogrusLevel{}, "level", "l", `Log level, one of "panic", "fatal", "error", "warn", "info", "debug", "trace"`)
+	pflag.VarP(LogrusLevel{}, "level", "l", `log level, one of "panic", "fatal", "error", "warn", "info", "debug", "trace"`)
 }
 
 var rootCmd = &cobra.Command{

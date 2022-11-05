@@ -20,7 +20,7 @@ func init() {
 var checkoutCmd = &cobra.Command{
 	Use:   "checkout",
 	Short: "Moves HEAD to another reference.",
-	RunE: func(cobracCmd *cobra.Command, args []string) error {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		if len(args) == 0 {
 			return errors.New("a repository reference must be specified")
 		}

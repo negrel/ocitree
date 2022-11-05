@@ -19,7 +19,7 @@ func init() {
 var listCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List local repositories.",
-	RunE: func(cobracCmd *cobra.Command, args []string) error {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		if len(args) != 0 {
 			return errors.New("too many arguments specified")
 		}
