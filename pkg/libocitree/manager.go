@@ -4,15 +4,22 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
+	"net/url"
 	"os"
+	"path/filepath"
 	"runtime"
+	"strings"
 	"time"
 
+	"github.com/containers/buildah"
 	"github.com/containers/common/libimage"
 	"github.com/containers/common/pkg/config"
 	"github.com/containers/image/v5/docker/reference"
+	storageTransport "github.com/containers/image/v5/storage"
 	"github.com/containers/image/v5/types"
 	"github.com/containers/storage"
+	"github.com/sirupsen/logrus"
 )
 
 var (
@@ -287,4 +294,147 @@ func (m *Manager) FetchByNamedRef(named reference.Named) error {
 
 	// Now pull the given reference
 	return m.pullRef(named)
+}
+
+func (m *Manager) Add(repo string, dest string, options AddOptions, sources ...string) error {
+	ref, err := ParseRepoName(repo)
+	if err != nil {
+		return err
+	}
+
+	return m.AddByNamedRef(ref, dest, options, sources...)
+}
+
+// Add commit the given files.
+func (m *Manager) AddByNamedRef(repoRef reference.Named, dest string, options AddOptions, sources ...string) error {
+	err := validRepoName(repoRef)
+	if err != nil {
+		return err
+	}
+	repoHeadRef := repoRef.Name() + ":" + HeadTag
+
+	for i, src := range sources {
+		srcURL, err := url.Parse(src)
+		if err != nil {
+			return fmt.Errorf("failed to parse sources URL: %w", err)
+		}
+
+		// if filepath
+		if srcURL.Scheme == "" {
+			// get absolute path
+			absSrc, err := filepath.Abs(src)
+			if err != nil {
+				return fmt.Errorf("failed to find absolute path to source: %v", err)
+			}
+			sources[i] = absSrc
+		}
+	}
+
+	builder, err := buildah.NewBuilder(context.Background(), m.store, buildah.BuilderOptions{
+		Args:                  nil,
+		FromImage:             repoHeadRef,
+		ContainerSuffix:       "ocitree",
+		Container:             repoRef.Name(),
+		PullPolicy:            buildah.PullNever,
+		Registry:              "",
+		BlobDirectory:         "",
+		Logger:                logrus.StandardLogger(),
+		Mount:                 false,
+		SignaturePolicyPath:   "",
+		ReportWriter:          options.ReportWriter,
+		SystemContext:         m.runtime.SystemContext(),
+		DefaultMountsFilePath: "",
+		Isolation:             0,
+		NamespaceOptions:      nil,
+		ConfigureNetwork:      0,
+		CNIPluginPath:         "",
+		CNIConfigDir:          "",
+		NetworkInterface:      nil,
+		IDMappingOptions:      nil,
+		Capabilities:          nil,
+		CommonBuildOpts:       nil,
+		Format:                "",
+		Devices:               nil,
+		DefaultEnv:            nil,
+		MaxPullRetries:        0,
+		PullRetryDelay:        0,
+		OciDecryptConfig:      nil,
+		ProcessLabel:          "",
+		MountLabel:            "",
+	})
+	if err != nil {
+		return fmt.Errorf("failed to create builder: %w", err)
+	}
+	defer builder.Delete()
+
+	err = builder.Add(dest, false, options.toAddAndCopyOptions(), sources...)
+	if err != nil {
+		return fmt.Errorf("failed to add files to image: %w", err)
+	}
+
+	imgRef, err := storageTransport.Transport.ParseStoreReference(m.store, repoHeadRef)
+	if err != nil {
+		return fmt.Errorf("failed to retrieve storage reference of HEAD of repository: %w", err)
+	}
+
+	fmt.Printf("%+v", options)
+
+	builder.SetCreatedBy(
+		fmt.Sprintf("/bin/sh -c #(nop) ADD --chown=%q --chmod=%q %v %v",
+			options.Chown, options.Chmod, strings.Join(sources, ", "), dest),
+	)
+
+	builder.Commit(context.Background(), imgRef, buildah.CommitOptions{
+		PreferredManifestType: "",
+		Compression:           0,
+		SignaturePolicyPath:   "",
+		AdditionalTags:        nil,
+		ReportWriter:          options.ReportWriter,
+		HistoryTimestamp:      nil,
+		SystemContext:         m.runtime.SystemContext(),
+		IIDFile:               "",
+		Squash:                false,
+		OmitHistory:           false,
+		BlobDirectory:         "",
+		EmptyLayer:            false,
+		OmitTimestamp:         false,
+		SignBy:                "",
+		Manifest:              "",
+		MaxRetries:            0,
+		RetryDelay:            0,
+		OciEncryptConfig:      nil,
+		OciEncryptLayers:      nil,
+		UnsetEnvs:             nil,
+	})
+
+	return nil
+}
+
+// AddOptions holds option to Repository.Add method.
+type AddOptions struct {
+	//Chmod sets the access permissions of the destination content.
+	Chmod string
+	// Chown is a spec for the user who should be given ownership over the
+	// newly-added content, potentially overriding permissions which would
+	// otherwise be set to 0:0.
+	Chown string
+
+	ReportWriter io.Writer
+}
+
+func (ao *AddOptions) toAddAndCopyOptions() buildah.AddAndCopyOptions {
+	return buildah.AddAndCopyOptions{
+		Chmod:             ao.Chmod,
+		Chown:             ao.Chown,
+		PreserveOwnership: false,
+		Hasher:            nil,
+		Excludes:          nil,
+		IgnoreFile:        "",
+		ContextDir:        "/",
+		IDMappingOptions:  nil,
+		DryRun:            false,
+		StripSetuidBit:    false,
+		StripSetgidBit:    false,
+		StripStickyBit:    false,
+	}
 }
