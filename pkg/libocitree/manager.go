@@ -405,7 +405,7 @@ func (m *Manager) commit(builder *buildah.Builder, repoHeadRef string, options C
 		return fmt.Errorf("failed to retrieve storage reference of HEAD of repository: %w", err)
 	}
 
-	builder.SetHistoryComment(options.Message)
+	builder.SetHistoryComment(options.Message + "\n")
 	builder.SetCreatedBy("/bin/sh -c #(ocitree) " + options.CreatedBy)
 
 	_, _, _, err = builder.Commit(context.Background(), imgRef, buildah.CommitOptions{

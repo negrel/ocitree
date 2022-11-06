@@ -60,7 +60,7 @@ var addCmd = &cobra.Command{
 		err = manager.AddByNamedRef(repoName, dest, libocitree.AddOptions{
 			Chmod:        chmod,
 			Chown:        chown,
-			Message:      message + "\n",
+			Message:      message,
 			ReportWriter: os.Stderr,
 		}, sources...)
 		if err != nil {
