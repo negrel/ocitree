@@ -10,11 +10,11 @@ import (
 )
 
 var (
-	errRepositoryCorruptedNoName = errors.New("corrupted repository, no valid name")
+	ErrRepositoryCorruptedNoName = errors.New("corrupted repository, no valid name")
 )
 
 type Repository struct {
-	image *libimage.Image
+	image   *libimage.Image
 }
 
 func newRepository(image *libimage.Image) *Repository {
@@ -74,7 +74,7 @@ func findRepoName(names []reference.Named) (string, error) {
 		}
 	}
 
-	return "", errRepositoryCorruptedNoName
+	return "", ErrRepositoryCorruptedNoName
 }
 
 // Commits returns the commits history of this repository.
@@ -98,6 +98,6 @@ func (r *Repository) Mount() (string, error) {
 }
 
 // Unmount unmount the repository.
-func (r *Repository) Unmount() (error) {
+func (r *Repository) Unmount() error {
 	return r.image.Unmount(true)
 }
