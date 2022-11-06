@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/docker/go-units"
@@ -62,9 +63,9 @@ var logCmd = &cobra.Command{
 			fmt.Printf("commit %v (%v) %v\n", commit.ID(), units.BytesSize(float64(commit.Size())), commit.Tags())
 			fmt.Printf("Date %v\n", commit.CreationDate().Format(time.RubyDate))
 			if comment := commit.Comment(); comment != "" {
-				fmt.Printf("	%v\n", commit.Comment())
+				fmt.Printf("	%v\n", strings.Split(commit.Comment(), "\nFROM")[0])
 			}
-			fmt.Printf("	%v\n", commit.CreatedBy())
+			fmt.Printf("	%v\n\n", commit.CreatedBy())
 		}
 
 		return nil

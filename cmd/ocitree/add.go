@@ -15,6 +15,7 @@ func init() {
 	setupStoreOptionsFlags(flagset)
 	flagset.String("chown", "", "change owner of source files before adding them")
 	flagset.String("chmod", "", "change file mode bits of source files before adding them")
+	flagset.StringP("message", "m", "", "commit message")
 }
 
 var addCmd = &cobra.Command{
@@ -54,10 +55,12 @@ var addCmd = &cobra.Command{
 		flags := cmd.Flags()
 		chmod, _ := flags.GetString("chmod")
 		chown, _ := flags.GetString("chown")
+		message, _ := flags.GetString("message")
 
 		err = manager.AddByNamedRef(repoName, dest, libocitree.AddOptions{
 			Chmod:        chmod,
 			Chown:        chown,
+			Message:      message + "\n",
 			ReportWriter: os.Stderr,
 		}, sources...)
 		if err != nil {
