@@ -19,6 +19,7 @@ import (
 	storageTransport "github.com/containers/image/v5/storage"
 	"github.com/containers/image/v5/types"
 	"github.com/containers/storage"
+	"github.com/containers/storage/pkg/archive"
 	"github.com/sirupsen/logrus"
 )
 
@@ -377,16 +378,15 @@ func (m *Manager) AddByNamedRef(repoRef reference.Named, dest string, options Ad
 		return fmt.Errorf("failed to retrieve storage reference of HEAD of repository: %w", err)
 	}
 
-	fmt.Printf("%+v", options)
-
+	builder.SetHistoryComment(options.Message)
 	builder.SetCreatedBy(
-		fmt.Sprintf("/bin/sh -c #(nop) ADD --chown=%q --chmod=%q %v %v",
+		fmt.Sprintf("/bin/sh -c #(ocitree) ADD --chown=%q --chmod=%q %v %v",
 			options.Chown, options.Chmod, strings.Join(sources, ", "), dest),
 	)
 
 	builder.Commit(context.Background(), imgRef, buildah.CommitOptions{
 		PreferredManifestType: "",
-		Compression:           0,
+		Compression:           archive.Gzip,
 		SignaturePolicyPath:   "",
 		AdditionalTags:        nil,
 		ReportWriter:          options.ReportWriter,
@@ -418,6 +418,8 @@ type AddOptions struct {
 	// newly-added content, potentially overriding permissions which would
 	// otherwise be set to 0:0.
 	Chown string
+
+	Message string
 
 	ReportWriter io.Writer
 }

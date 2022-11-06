@@ -15,11 +15,12 @@ func init() {
 	setupStoreOptionsFlags(flagset)
 	flagset.String("chown", "", "change owner of source files before adding them")
 	flagset.String("chmod", "", "change file mode bits of source files before adding them")
+	flagset.StringP("message", "m", "", "commit message")
 }
 
 var addCmd = &cobra.Command{
 	Use:   "add",
-	Short: "Add files to a repository.",
+	Short: "Add files to a repository and commit them.",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if len(args) == 0 {
 			return errors.New("a repository name must be specified")
@@ -54,10 +55,12 @@ var addCmd = &cobra.Command{
 		flags := cmd.Flags()
 		chmod, _ := flags.GetString("chmod")
 		chown, _ := flags.GetString("chown")
+		message, _ := flags.GetString("message")
 
 		err = manager.AddByNamedRef(repoName, dest, libocitree.AddOptions{
 			Chmod:        chmod,
 			Chown:        chown,
+			Message:      message + "\n",
 			ReportWriter: os.Stderr,
 		}, sources...)
 		if err != nil {
