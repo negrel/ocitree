@@ -1,6 +1,7 @@
 package libocitree
 
 import (
+	"errors"
 	"fmt"
 	"regexp"
 	"strconv"
@@ -10,6 +11,11 @@ import (
 
 var (
 	ReferenceOffsetRegex = regexp.MustCompile(`(\^+|~\d+)$`)
+
+	ErrRepoNameContainsTagOrDigest        = errors.New("repository name can't contain any tag or digest")
+	ErrRepoReferenceIsNotNamed            = errors.New("repository reference is not a named reference")
+	ErrRemoteRepoReferenceContainsHeadTag = errors.New("remote repository reference contains a HEAD tag")
+	ErrRemoteRepoReferenceIsRelative      = errors.New("remote repository reference is relative")
 )
 
 // Reference define a repository reference.
@@ -26,10 +32,33 @@ type Reference struct {
 	offset uint
 }
 
-// ParseReference parses a reference string and returns a new Reference object.
-// If the reference doesn't contains a tag, it default to HEAD tag.
+// ParseNamedReference parses a reference string and returns a new Reference object.
+// If the reference doesn't contain a tag, it default to HEAD tag.
 // An error is returned if parsing fails or reference isn't named.
-func ParseReference(refStr string) (ref Reference, err error) {
+func ParseNamedReference(refStr string) (Reference, error) {
+	return parseReference(refStr, HeadTag)
+}
+
+// ParseRemoteNamedReference apply ParseNamedReference on the given string and ensure
+// the reference is absolute and doesn't contains a HEAD tag.
+func ParseRemoteNamedReference(refStr string) (ref Reference, err error) {
+	ref, err = parseReference(refStr, LatestTag)
+	if err != nil {
+		return ref, err
+	}
+
+	if ref.tag == HeadTag {
+		return ref, ErrRemoteRepoReferenceContainsHeadTag
+	}
+
+	if ref.IsRelative() {
+		return ref, ErrRemoteRepoReferenceIsRelative
+	}
+
+	return ref, nil
+}
+
+func parseReference(refStr, defaultTag string) (ref Reference, err error) {
 	// Parse offset if match regex
 	if offsetIndex := ReferenceOffsetRegex.FindStringIndex(refStr); offsetIndex != nil {
 		ref.offset, err = parseOffset(refStr[offsetIndex[0]:offsetIndex[1]])
@@ -42,7 +71,7 @@ func ParseReference(refStr string) (ref Reference, err error) {
 	// Parse docker ref
 	dockerRef, err := reference.ParseAnyReference(refStr)
 	if err != nil {
-		return ref, fmt.Errorf("failed to parse repository reference: %w", err)
+		return ref, fmt.Errorf("failed to parse docker reference: %w", err)
 	}
 
 	// Ensure reference is named
@@ -56,10 +85,20 @@ func ParseReference(refStr string) (ref Reference, err error) {
 	if tagged, isTagged := dockerRef.(reference.Tagged); isTagged {
 		ref.tag = tagged.Tag()
 	} else {
-		ref.tag = HeadTag
+		ref.tag = defaultTag
 	}
 
 	return ref, nil
+}
+
+// HeadReferenceFromNamedReference returns an absolute reference based on the
+// given reference.Named with a HEAD tag.
+func HeadReferenceFromNamedReference(ref reference.Named) Reference {
+	return Reference{
+		name:   ref.Name(),
+		tag:    HeadTag,
+		offset: 0,
+	}
 }
 
 // Name implements reference.Named
@@ -105,7 +144,7 @@ func (r *Reference) IsRelative() bool {
 func (r *Reference) ToRemoteReference() Reference {
 	ref := Reference{
 		name: r.Name(),
-		tag: r.Tag(),
+		tag:  r.Tag(),
 	}
 	if r.tag == HeadTag {
 		ref.tag = LatestTag
