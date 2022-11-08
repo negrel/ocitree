@@ -44,7 +44,13 @@ var cloneCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
-		err = manager.Clone(repoRef)
+		err = manager.Clone(repoRef, libocitree.CloneOptions{
+			PullOptions: libocitree.PullOptions{
+				MaxRetries:   0,
+				RetryDelay:   0,
+				ReportWriter: os.Stderr,
+			},
+		})
 		if err != nil {
 			logrus.Errorf("failed to clone repository %q: %v", repoRef, err)
 			os.Exit(1)

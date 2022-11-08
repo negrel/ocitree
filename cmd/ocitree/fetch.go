@@ -43,7 +43,13 @@ var fetchCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
-		err = manager.Fetch(repoName)
+		err = manager.Fetch(repoName, libocitree.FetchOptions{
+			PullOptions: libocitree.PullOptions{
+				MaxRetries:   0,
+				RetryDelay:   0,
+				ReportWriter: os.Stderr,
+			},
+		})
 		if err != nil {
 			logrus.Errorf("an error occurred while fetching repository: %v", err)
 			os.Exit(1)

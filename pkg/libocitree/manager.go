@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"net/url"
-	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -107,8 +106,13 @@ func (m *Manager) Repositories() ([]*Repository, error) {
 	return result, nil
 }
 
+// CloneOptions holds clone options.
+type CloneOptions struct {
+	PullOptions
+}
+
 // Clone clones remote repository with the given name to local storage.
-func (m *Manager) Clone(remoteRef reference.RemoteRepository) error {
+func (m *Manager) Clone(remoteRef reference.RemoteRepository, options CloneOptions) error {
 	headRef := reference.LocalHeadFromNamed(remoteRef)
 
 	// Ensure repository doesn't exist
@@ -117,7 +121,7 @@ func (m *Manager) Clone(remoteRef reference.RemoteRepository) error {
 	}
 
 	// Pull image
-	images, err := m.pullRef(remoteRef)
+	images, err := m.pullRef(remoteRef, &options.PullOptions)
 	if err != nil {
 		return err
 	}
@@ -132,9 +136,14 @@ func (m *Manager) Clone(remoteRef reference.RemoteRepository) error {
 	return nil
 }
 
-func (m *Manager) pullRef(ref reference.RemoteRepository) ([]*libimage.Image, error) {
-	maxRetries := uint(3)
-	retryDelay := time.Second
+// PullOptions holds configuration options for pulling operations.
+type PullOptions struct {
+	MaxRetries   uint
+	RetryDelay   time.Duration
+	ReportWriter io.Writer
+}
+
+func (m *Manager) pullRef(ref reference.RemoteRepository, options *PullOptions) ([]*libimage.Image, error) {
 	return m.runtime.Pull(context.Background(), ref.String(), config.PullPolicyNewer, &libimage.PullOptions{
 		CopyOptions: libimage.CopyOptions{
 			SystemContext:                    m.runtime.SystemContext(),
@@ -147,8 +156,8 @@ func (m *Manager) pullRef(ref reference.RemoteRepository) ([]*libimage.Image, er
 			CertDirPath:                      "",
 			DirForceCompress:                 false,
 			InsecureSkipTLSVerify:            0,
-			MaxRetries:                       &maxRetries,
-			RetryDelay:                       &retryDelay,
+			MaxRetries:                       &options.MaxRetries,
+			RetryDelay:                       &options.RetryDelay,
 			ManifestMIMEType:                 "",
 			OciAcceptUncompressedLayers:      true,
 			OciEncryptConfig:                 nil,
@@ -162,7 +171,7 @@ func (m *Manager) pullRef(ref reference.RemoteRepository) ([]*libimage.Image, er
 			SignBySigstorePrivateKeyFile:     "",
 			SignSigstorePrivateKeyPassphrase: nil,
 			RemoveSignatures:                 false,
-			Writer:                           os.Stderr,
+			Writer:                           options.ReportWriter,
 			Architecture:                     "",
 			OS:                               "",
 			Variant:                          "",
@@ -175,9 +184,14 @@ func (m *Manager) pullRef(ref reference.RemoteRepository) ([]*libimage.Image, er
 	})
 }
 
-// Checkout moves repository's HEAD associated to the given reference to another reference.
+// Checkout moves repository's HEAD associated to the given reference name
+// to the given reference.
 // Name of the repository is extracted from the given reference.
 func (m *Manager) Checkout(ref reference.LocalRepository) error {
+	if !m.LocalRepositoryExist(ref) {
+		return ErrLocalRepositoryUnknown
+	}
+
 	img, err := m.lookupImage(ref)
 	if err != nil {
 		return fmt.Errorf("local reference not found: %v", err)
@@ -191,8 +205,13 @@ func (m *Manager) Checkout(ref reference.LocalRepository) error {
 	return nil
 }
 
+// FetchOptions holds fetch options.
+type FetchOptions struct {
+	PullOptions
+}
+
 // Fetch updates every repository reference.
-func (m *Manager) Fetch(remoteRef reference.RemoteRepository) error {
+func (m *Manager) Fetch(remoteRef reference.RemoteRepository, options FetchOptions) error {
 	if !m.LocalRepositoryExist(reference.NameFromNamed(remoteRef)) {
 		return ErrLocalRepositoryUnknown
 	}
@@ -224,7 +243,7 @@ func (m *Manager) Fetch(remoteRef reference.RemoteRepository) error {
 			}
 
 			// Pull image
-			_, err = m.pullRef(remoteRef)
+			_, err = m.pullRef(remoteRef, &options.PullOptions)
 			if err != nil {
 				multierror.Append(pullErrs, err)
 			}
