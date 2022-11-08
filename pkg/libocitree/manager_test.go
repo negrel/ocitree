@@ -1,19 +1,19 @@
 package libocitree
 
 import (
+	"bytes"
+	"context"
 	"encoding/base64"
-	"fmt"
-	"io/fs"
 	"os"
-	"path/filepath"
-	"syscall"
 	"testing"
 	"time"
 
+	"github.com/containers/common/libimage"
 	"github.com/containers/common/pkg/config"
 	"github.com/containers/image/v5/types"
 	"github.com/containers/storage"
 	"github.com/containers/storage/pkg/reexec"
+	"github.com/negrel/ocitree/pkg/reference"
 	"github.com/stretchr/testify/require"
 )
 
@@ -28,211 +28,172 @@ func TestManagerClone(t *testing.T) {
 	manager, cleanup := newTestManager(t)
 	defer cleanup()
 
-	// Repository doesn't exist
-	repo, err := manager.Repository("docker.io/library/alpine")
-	require.Error(t, err)
-	require.Nil(t, repo)
-
-	// Clone the repository using an equivalent name
-	err = manager.Clone("alpine:3.15")
+	const repoName = "docker.io/library/alpine"
+	repoHeadRef, err := reference.LocalFromString(repoName)
+	require.NoError(t, err)
+	remoteRef, err := reference.RemoteFromString(repoName)
 	require.NoError(t, err)
 
-	// Get cloned repository
-	repo3_15, err := manager.Repository("alpine")
-	require.NoError(t, err)
+	runtime := manager.runtime
 
-	// Repository exists now, again using a similar name
-	img3_15, err := manager.lookupImage("docker.io/alpine:HEAD")
-	require.NoError(t, err)
-	require.Equal(t, repo3_15.ID(), img3_15.ID())
-
-	t.Run("RepositoryAlreadyExist", func(t *testing.T) {
-		// Cloning another reference to the same repo
-		err := manager.Clone("alpine:3.16")
+	t.Run("ImageMissing", func(t *testing.T) {
+		// Ensure repository doesn't exist
+		imageExist, err := runtime.Exists(repoHeadRef.String())
 		require.NoError(t, err)
+		require.False(t, imageExist, "repository image already exist")
 
-		img3_16, err := manager.lookupImage("docker.io/library/alpine:3.16")
+		// Clone reference
+		reportWriter := &bytes.Buffer{}
+		err = manager.Clone(remoteRef, CloneOptions{
+			PullOptions: PullOptions{
+				MaxRetries:   0,
+				RetryDelay:   0,
+				ReportWriter: reportWriter,
+			},
+		})
 		require.NoError(t, err)
+		require.Greater(t, len(reportWriter.String()), 0, "report writer is empty")
 
-		// Ensure id differs
-		require.NotEqual(t, img3_16.ID(), repo3_15.ID())
-
-		// Ensure HEAD hasn't moved
-		repo, err := manager.Repository("alpine")
+		// Ensure local repository exists now
+		imageExist, err = runtime.Exists(repoHeadRef.String())
 		require.NoError(t, err)
-		require.NotEqual(t, img3_16.ID(), repo.ID())
-		require.Equal(t, img3_15.ID(), repo.ID())
+		require.True(t, imageExist, "repository image doesn't exist after clone")
+	})
+
+	t.Run("ImageHeadTagMissing", func(t *testing.T) {
+		// Remove repository:HEAD reference
+		runtime.RemoveImages(context.Background(), []string{repoHeadRef.String()}, &libimage.RemoveImagesOptions{
+			Force:   true,
+			Ignore:  false,
+			NoPrune: true,
+		})
+
+		// Ensure repository:HEAD doesn't exist
+		imageExist, err := runtime.Exists(repoHeadRef.String())
+		require.NoError(t, err)
+		require.False(t, imageExist, "repository already exist")
+
+		// Ensure repository:latest exists
+		imageExist, err = runtime.Exists(remoteRef.String())
+		require.NoError(t, err)
+		require.True(t, imageExist, "repository image doesn't exist")
+
+		// Clone reference
+		reportWriter := &bytes.Buffer{}
+		err = manager.Clone(remoteRef, CloneOptions{
+			PullOptions: PullOptions{
+				MaxRetries:   0,
+				RetryDelay:   0,
+				ReportWriter: reportWriter,
+			},
+		})
+		require.NoError(t, err)
+		require.Len(t, reportWriter.String(), 0, "report writer is not empty")
+
+		// Ensure local repository exists now
+		imageExist, err = runtime.Exists(repoHeadRef.String())
+		require.NoError(t, err)
+		require.True(t, imageExist, "repository still doesn't exist")
+	})
+
+	t.Run("RepositoryExists", func(t *testing.T) {
+		// Ensure local repository exists
+		imageExist, err := runtime.Exists(repoHeadRef.String())
+		require.NoError(t, err)
+		require.True(t, imageExist, "repository doesn't exist")
+
+		reportWriter := &bytes.Buffer{}
+		err = manager.Clone(remoteRef, CloneOptions{
+			PullOptions: PullOptions{
+				MaxRetries:   0,
+				RetryDelay:   0,
+				ReportWriter: reportWriter,
+			},
+		})
+		require.Error(t, err)
+		require.Equal(t, ErrLocalRepositoryAlreadyExist, err)
+		require.Len(t, reportWriter.String(), 0, "report writer is not empty")
 	})
 }
 
-func TestManagerListRepository(t *testing.T) {
+func TestManagerRepository(t *testing.T) {
 	manager, cleanup := newTestManager(t)
 	defer cleanup()
 
-	repos, err := manager.Repositories()
-	require.NoError(t, err)
-	require.Len(t, repos, 0)
+	runtime := manager.runtime
 
-	// Clone the repository
-	err = manager.Clone("alpine:latest")
+	repoName, err := reference.NameFromString("alpine")
 	require.NoError(t, err)
 
-	// Get cloned repository
-	clonedRepo, err := manager.Repository("alpine")
-	require.NoError(t, err)
+	t.Run("ImageMissing", func(t *testing.T) {
+		imageExist, err := runtime.Exists(repoName.Name())
+		require.NoError(t, err)
+		require.False(t, imageExist, "image is not missing")
 
-	repos, err = manager.Repositories()
-	require.NoError(t, err)
-	require.Len(t, repos, 1)
+		// Repository image is absent
+		_, err = manager.Repository(repoName)
+		require.Error(t, err)
+	})
 
-	require.Equal(t, clonedRepo.ID(), repos[0].ID())
-}
+	t.Run("RepositoryExist", func(t *testing.T) {
+		err = manager.Clone(reference.RemoteLatestFromNamed(repoName), CloneOptions{})
+		require.NoError(t, err)
 
-func TestManagerCheckout(t *testing.T) {
-	manager, cleanup := newTestManager(t)
-	defer cleanup()
-
-	// Clone the repository
-	err := manager.Clone("alpine:latest")
-	require.NoError(t, err)
-
-	// Get cloned repository
-	clonedRepo, err := manager.Repository("alpine")
-	require.NoError(t, err)
-
-	// Checkout to a remote reference not in local storage should fail
-	err = manager.Checkout("alpine:3.15")
-	require.Error(t, err)
-	// Clone remote reference
-	err = manager.Clone("alpine:3.15")
-	require.NoError(t, err)
-
-	// Checkout local reference
-	err = manager.Checkout("alpine:3.15")
-	require.NoError(t, err)
-
-	_ = clonedRepo
-}
-
-func TestManagerAdd(t *testing.T) {
-	manager, cleanup := newTestManager(t)
-	defer cleanup()
-
-	const repoName = "archlinux"
-	addFilepath, err := filepath.Abs("../../main.go")
-	require.NoError(t, err, "fail to canonicalize main.go filepath")
-
-	// Clone archlinux repository
-	err = manager.Clone(repoName)
-	require.NoError(t, err)
-
-	// mount helper function
-	mount := func(repoName string) (mountpoint string, umount func() error, stat func(string) (fs.FileInfo, error)) {
+		// Get repository
 		repo, err := manager.Repository(repoName)
 		require.NoError(t, err)
-		mountpoint, err = repo.Mount()
-		require.NoError(t, err)
+		require.Equal(t, repoName.Name(), repo.Name())
 
-		return mountpoint, repo.Unmount, func(fname string) (fs.FileInfo, error) {
-			dirfs := os.DirFS(mountpoint).(fs.StatFS)
-			return dirfs.Stat(filepath.Base(addFilepath))
-		}
+		// Compare ID of image and returned repository
+		image, _, err := runtime.LookupImage(reference.LocalHeadFromNamed(repoName).String(), nil)
+		require.NoError(t, err)
+		require.Equal(t, image.ID(), repo.ID())
+	})
+}
+
+func TestManagerRepositories(t *testing.T) {
+	manager, cleanup := newTestManager(t)
+	defer cleanup()
+
+	// List of repository
+	repositoriesName := []string{"docker.io/library/alpine", "docker.io/library/archlinux", "docker.io/library/ubuntu"}
+	repositoriesRef := make([]reference.RemoteRepository, 3)
+	for i, name := range repositoriesName {
+		var err error
+		repositoriesRef[i], err = reference.RemoteFromString(name)
+		require.NoError(t, err)
 	}
 
-	_, umount, stat := mount(repoName)
-	defer umount()
+	// Clone some repositories
+	for _, repo := range repositoriesRef {
+		err := manager.Clone(repo, CloneOptions{})
+		require.NoError(t, err)
+	}
 
-	// Ensure file is absent
-	_, err = stat(addFilepath)
-	require.Error(t, err, "file is already present in image")
-	require.Contains(t, err.Error(), "no such file or directory")
+	repositories, err := manager.Repositories()
+	require.NoError(t, err)
+	require.Len(t, repositories, len(repositoriesRef), "length of repository list doesn't match number of cloned repositories")
 
-	for _, test := range []struct {
-		chown            string
-		chmod            string
-		message          string
-		expectedUid      uint32
-		expectedGid      uint32
-		expectedFileMode fs.FileMode
-	}{
-		{
-			chown:            "",
-			chmod:            "",
-			message:          "simple message",
-			expectedUid:      0,
-			expectedGid:      0,
-			expectedFileMode: 0644,
-		},
-		{
-			chown:            "root:root",
-			chmod:            "0777",
-			message:          randomCommitMessage(),
-			expectedUid:      0,
-			expectedGid:      0,
-			expectedFileMode: 0777,
-		},
-		{
-			chown:            "root:2000",
-			chmod:            "0421",
-			message:          randomCommitMessage(),
-			expectedUid:      0,
-			expectedGid:      2000,
-			expectedFileMode: 0421,
-		},
-		{
-			chown:            "2020:2000",
-			chmod:            "0321",
-			message:          randomCommitMessage(),
-			expectedUid:      2020,
-			expectedGid:      2000,
-			expectedFileMode: 0321,
-		},
-	} {
-		t.Run("", func(t *testing.T) {
-			// Add the file
-			err = manager.Add(repoName, "/", AddOptions{
-				Chown:   test.chown,
-				Chmod:   test.chmod,
-				Message: test.message,
-			}, addFilepath)
-			require.NoError(t, err)
-
-			// Mount repository
-			_, umount, stat = mount(repoName)
-			defer umount()
-
-			// Ensure file is present
-			fileInfo, err := stat(addFilepath)
-			require.NoError(t, err, "file is not in image")
-
-			// With the right permission
-			require.Equal(t, test.expectedFileMode, fileInfo.Mode(), "added file don't have the right permissions")
-			// And owner
-			fileStat := fileInfo.Sys().(*syscall.Stat_t)
-			require.Equal(t, test.expectedUid, fileStat.Uid)
-			require.Equal(t, test.expectedGid, fileStat.Gid)
-
-			repo, err := manager.Repository(repoName)
-			require.NoError(t, err)
-
-			// Check commit
-			commits, err := repo.Commits()
-			require.NoError(t, err, "failed to retrieve commits from repository")
-			require.Greater(t, len(commits), 0, "commits list is empty")
-			// commit message
-			require.Contains(t, commits[0].Comment(), test.message + "\n", "commit message doesn't contains expected substring")
-
-
-			// Check commit CreatedBy
-			require.Equal(t,
-				commits[0].CreatedBy(),
-				fmt.Sprintf("/bin/sh -c #(ocitree) ADD --chown=\"%v\" --chmod=\"%v\" %v /", test.chown, test.chmod, addFilepath),
-			)
-		})
+	for _, repo := range repositories {
+		require.Contains(t, repositoriesName, repo.Name())
 	}
 }
 
 func newTestManager(t *testing.T) (manager *Manager, cleanup func()) {
+	store, systemContext, workdir := newStoreAndSystemContext(t)
+
+	manager, err := NewManagerFromStore(store, systemContext)
+	require.NoError(t, err)
+
+	cleanup = func() {
+		_, _ = manager.store.Shutdown(true)
+		_ = os.RemoveAll(workdir)
+	}
+
+	return manager, cleanup
+}
+
+func newStoreAndSystemContext(t *testing.T) (storage.Store, *types.SystemContext, string) {
 	workdir, err := os.MkdirTemp("", "testStorageRuntime")
 	require.NoError(t, err)
 	storeOptions := storage.StoreOptions{
@@ -250,15 +211,7 @@ func newTestManager(t *testing.T) (manager *Manager, cleanup func()) {
 	store, err := storage.GetStore(storeOptions)
 	require.NoError(t, err)
 
-	manager, err = NewManagerFromStore(store, systemContext)
-	require.NoError(t, err)
-
-	cleanup = func() {
-		_, _ = manager.store.Shutdown(true)
-		_ = os.RemoveAll(workdir)
-	}
-
-	return manager, cleanup
+	return store, systemContext, workdir
 }
 
 // tmpdir returns a path to a temporary directory.
