@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/containers/image/v5/docker/reference"
 	"github.com/negrel/ocitree/pkg/libocitree"
+	"github.com/negrel/ocitree/pkg/reference"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )
@@ -27,7 +27,7 @@ var checkoutCmd = &cobra.Command{
 		if len(args) > 1 {
 			return errors.New("too many arguments specified")
 		}
-		repoRef, err := libocitree.ParseRepoReference(args[0])
+		repoRef, err := reference.LocalFromString(args[0])
 		if err != nil {
 			return err
 		}
@@ -44,19 +44,19 @@ var checkoutCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
-		beforeCheckout, err := manager.Repository(repoRef.Name())
+		beforeCheckout, err := manager.Repository(repoRef)
 		if err != nil {
 			logrus.Errorf("failed to find a repository before checkout: %v", err)
 			os.Exit(1)
 		}
 
-		err = manager.CheckoutByRef(repoRef)
+		err = manager.Checkout(repoRef)
 		if err != nil {
 			logrus.Errorf("failed to checkout repository %q to reference %q: %v", repoRef.Name(), repoRef.String(), err)
 			os.Exit(1)
 		}
 
-		afterCheckout, err := manager.Repository(repoRef.Name())
+		afterCheckout, err := manager.Repository(repoRef)
 		if err != nil {
 			logrus.Errorf("failed to find a repository after checkout: %v", err)
 			os.Exit(1)
@@ -66,10 +66,7 @@ var checkoutCmd = &cobra.Command{
 		if tags, err := beforeCheckout.Tags(); err == nil {
 			beforeIDs = fmt.Sprintf("%q (%v)", tags, beforeIDs)
 		}
-		afterID := afterCheckout.ID()[:16]
-		if tagged, isTagged := repoRef.(reference.Tagged); isTagged {
-			afterID = fmt.Sprintf("%q (%v)", tagged.Tag(), afterID)
-		}
+		afterID := fmt.Sprintf("%q (%v)", repoRef.Tag(), afterCheckout.ID()[:16])
 
 		fmt.Printf("Previous HEAD position was %v\n", beforeIDs)
 		fmt.Printf("Switched to %v\n", afterID)

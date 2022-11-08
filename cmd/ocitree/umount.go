@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/negrel/ocitree/pkg/libocitree"
+	"github.com/negrel/ocitree/pkg/reference"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )
@@ -25,7 +26,7 @@ var umountCmd = &cobra.Command{
 		if len(args) > 1 {
 			return errors.New("too many arguments specified")
 		}
-		repoName, err := libocitree.ParseRepoName(args[0])
+		repoName, err := reference.NameFromString(args[0])
 		if err != nil {
 			return err
 		}
@@ -42,7 +43,7 @@ var umountCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
-		repo, err := manager.RepositoryByNamedRef(repoName)
+		repo, err := manager.Repository(repoName)
 		if err != nil {
 			logrus.Errorf("failed to retrieve repository: %v", err)
 			os.Exit(1)

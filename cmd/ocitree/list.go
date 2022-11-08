@@ -44,7 +44,7 @@ var listCmd = &cobra.Command{
 
 		fmt.Println("Local repositories:")
 		for _, repo := range repositories {
-			name, err := repo.Name()
+			name := repo.Name()
 			if err != nil {
 				logrus.Errorf("failed to retrieve name of repository %q: %v", repo.ID(), err)
 				continue

@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/negrel/ocitree/pkg/libocitree"
+	"github.com/negrel/ocitree/pkg/reference"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )
@@ -25,13 +26,12 @@ var addCmd = &cobra.Command{
 		if len(args) == 0 {
 			return errors.New("a repository name must be specified")
 		}
-		repoName, err := libocitree.ParseRepoName(args[0])
-		if err != nil {
-			return err
-		}
-
 		if len(args) == 1 {
 			return errors.New("a destination directory must be specified")
+		}
+		repoName, err := reference.NameFromString(args[0])
+		if err != nil {
+			return err
 		}
 		dest := args[1]
 
@@ -57,7 +57,7 @@ var addCmd = &cobra.Command{
 		chown, _ := flags.GetString("chown")
 		message, _ := flags.GetString("message")
 
-		err = manager.AddByNamedRef(repoName, dest, libocitree.AddOptions{
+		err = manager.Add(repoName, dest, libocitree.AddOptions{
 			Chmod:        chmod,
 			Chown:        chown,
 			Message:      message,

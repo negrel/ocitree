@@ -16,21 +16,19 @@ import (
 	"github.com/containers/buildah/define"
 	"github.com/containers/common/libimage"
 	"github.com/containers/common/pkg/config"
-	"github.com/containers/image/v5/docker/reference"
 	storageTransport "github.com/containers/image/v5/storage"
 	"github.com/containers/image/v5/types"
 	"github.com/containers/storage"
 	"github.com/containers/storage/pkg/archive"
+	"github.com/hashicorp/go-multierror"
+	"github.com/negrel/ocitree/pkg/reference"
 	"github.com/sirupsen/logrus"
 )
 
 var (
 	ErrLocalRepositoryAlreadyExist = errors.New("local repository with the same name already exist")
+	ErrLocalRepositoryUnknown      = errors.New("unknown local repository")
 )
-
-func repoHeadString(ref reference.Named) string {
-	return ref.Name() + ":" + HeadTag
-}
 
 // Manager defines a repositories manager.
 type Manager struct {
@@ -58,51 +56,16 @@ func NewManagerFromStore(store storage.Store, sysctx *types.SystemContext) (*Man
 }
 
 // Repository returns the repository associated with the given name.
-func (m *Manager) Repository(name string) (*Repository, error) {
-	named, err := ParseRepoName(name)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse repository name: %w", err)
-	}
-
-	return m.RepositoryByNamedRef(named)
-}
-
-// RepositoryByNamedRef returns the repository associated with the given
-// reference name.
-func (m *Manager) RepositoryByNamedRef(named reference.Named) (*Repository, error) {
-	if err := validRepoName(named); err != nil {
-		return nil, err
-	}
-
-	named, err := reference.WithTag(named, HeadTag)
-	if err != nil {
-		return nil, err
-	}
-
-	img, err := m.lookupImage(named.String())
-	if err != nil {
-		return nil, err
-	}
-
-	return newRepository(img), nil
-}
-
-func (m *Manager) imageExist(name string) (bool, error) {
-	images, err := m.runtime.ListImages(context.Background(), []string{}, &libimage.ListImagesOptions{
-		Filters: []string{"reference=" + name},
-	})
-	if err != nil {
-		return false, err
-	}
-
-	return len(images) > 0, err
+// An error is returned if local repository is missing or corrupted.
+func (m *Manager) Repository(name reference.Named) (*Repository, error) {
+	return newRepositoryFromName(m, name)
 }
 
 // lookupImage returns the image associated to the given ref.
 // This function expect a fully qualified reference and will use default values
 // ("latest" for tag, "docker.io" for registry) if not.
-func (m *Manager) lookupImage(ref string) (*libimage.Image, error) {
-	img, _, err := m.runtime.LookupImage(ref, &libimage.LookupImageOptions{
+func (m *Manager) lookupImage(ref reference.LocalRepository) (*libimage.Image, error) {
+	img, _, err := m.runtime.LookupImage(ref.String(), &libimage.LookupImageOptions{
 		Architecture:   runtime.GOARCH,
 		OS:             runtime.GOOS,
 		Variant:        "",
@@ -116,6 +79,13 @@ func (m *Manager) lookupImage(ref string) (*libimage.Image, error) {
 	return img, nil
 }
 
+// LocalRepositoryExist returns true if a local repository with the given name
+// exist.
+func (m *Manager) LocalRepositoryExist(name reference.Named) bool {
+	img, err := m.lookupImage(reference.LocalHeadFromNamed(name))
+	return img != nil && err == nil
+}
+
 // Repositories returns the list of repositories
 func (m *Manager) Repositories() ([]*Repository, error) {
 	images, err := m.runtime.ListImages(context.Background(), nil, &libimage.ListImagesOptions{
@@ -127,54 +97,45 @@ func (m *Manager) Repositories() ([]*Repository, error) {
 
 	result := make([]*Repository, len(images))
 	for i, image := range images {
-		result[i] = newRepository(image)
+		result[i], err = newRepositoryFromImage(m, image)
+		if err != nil {
+			logrus.Debugf("image %q was listed with HEAD reference but repository can't be created from it: %v", image.Names(), err)
+			continue
+		}
 	}
 
 	return result, nil
 }
 
 // Clone clones remote repository with the given name to local storage.
-func (m *Manager) Clone(name string) error {
-	named, err := ParseRemoteRepoReference(name)
-	if err != nil {
-		return fmt.Errorf("failed to parse remote repository reference: %w", err)
+func (m *Manager) Clone(remoteRef reference.RemoteRepository) error {
+	headRef := reference.LocalHeadFromNamed(remoteRef)
+
+	// Ensure repository doesn't exist
+	if m.LocalRepositoryExist(reference.NameFromNamed(remoteRef)) {
+		return ErrLocalRepositoryAlreadyExist
 	}
 
-	return m.CloneByNamedRef(named)
-}
-
-// CloneByNamedRef clones remote repository with the given remote repository reference to local storage.
-func (m *Manager) CloneByNamedRef(named reference.Named) error {
-	// Ensure local repository doesn't exist
-	alreadyExist := false
-	if repo, _ := m.Repository(named.Name()); repo != nil {
-		alreadyExist = true
-	}
-
-	err := m.pullRef(named)
+	// Pull image
+	images, err := m.pullRef(remoteRef)
 	if err != nil {
 		return err
 	}
 
-	img, err := m.lookupImage(named.String())
+	// Assign HEAD reference
+	img := images[0]
+	err = m.store.AddNames(img.ID(), []string{headRef.String()})
 	if err != nil {
-		return fmt.Errorf("failed to retrieve repository after pulling image %q: %w", named.Name(), err)
-	}
-
-	if !alreadyExist {
-		err = m.store.AddNames(img.ID(), []string{repoHeadString(named)})
-		if err != nil {
-			return fmt.Errorf("failed to create repository from image %q: %v", named.String(), err)
-		}
+		return fmt.Errorf("failed to add HEAD reference to image: %w", err)
 	}
 
 	return nil
 }
 
-func (m *Manager) pullRef(repoRef reference.Reference) error {
+func (m *Manager) pullRef(ref reference.RemoteRepository) ([]*libimage.Image, error) {
 	maxRetries := uint(3)
 	retryDelay := time.Second
-	_, err := m.runtime.Pull(context.Background(), repoRef.String(), config.PullPolicyNewer, &libimage.PullOptions{
+	return m.runtime.Pull(context.Background(), ref.String(), config.PullPolicyNewer, &libimage.PullOptions{
 		CopyOptions: libimage.CopyOptions{
 			SystemContext:                    m.runtime.SystemContext(),
 			SourceLookupReferenceFunc:        nil,
@@ -212,33 +173,17 @@ func (m *Manager) pullRef(repoRef reference.Reference) error {
 		},
 		AllTags: false,
 	})
-	return err
 }
 
-// Checkout moves repository's HEAD to the given reference.
-func (m *Manager) Checkout(refStr string) error {
-	ref, err := ParseRemoteRepoReference(refStr)
-	if err != nil {
-		return err
-	}
-
-	return m.CheckoutByRef(ref)
-}
-
-// CheckoutByRef moves repository's HEAD associated to the given reference to another reference.
+// Checkout moves repository's HEAD associated to the given reference to another reference.
 // Name of the repository is extracted from the given reference.
-func (m *Manager) CheckoutByRef(ref reference.Named) error {
-	err := validRemoteRepoReference(ref)
+func (m *Manager) Checkout(ref reference.LocalRepository) error {
+	img, err := m.lookupImage(ref)
 	if err != nil {
-		return err
+		return fmt.Errorf("local reference not found: %v", err)
 	}
 
-	img, err := m.lookupImage(ref.String())
-	if err != nil {
-		return fmt.Errorf("local reference to %q not found: %v", ref.String(), err)
-	}
-
-	err = m.store.AddNames(img.ID(), []string{repoHeadString(ref)})
+	err = m.store.AddNames(img.ID(), []string{reference.LocalHeadFromNamed(ref).String()})
 	if err != nil {
 		return err
 	}
@@ -247,25 +192,14 @@ func (m *Manager) CheckoutByRef(ref reference.Named) error {
 }
 
 // Fetch updates every repository reference.
-func (m *Manager) Fetch(refStr string) error {
-	ref, err := ParseRemoteRepoReference(refStr)
-	if err != nil {
-		return fmt.Errorf("failed to parse repository name: %w", err)
-	}
-
-	return m.FetchByNamedRef(ref)
-}
-
-// FetchByNamedRef updates every repository reference.
-func (m *Manager) FetchByNamedRef(named reference.Named) error {
-	repo, _ := m.Repository(named.Name())
-	if repo == nil {
-		return fmt.Errorf("repository not found")
+func (m *Manager) Fetch(remoteRef reference.RemoteRepository) error {
+	if !m.LocalRepositoryExist(reference.NameFromNamed(remoteRef)) {
+		return ErrLocalRepositoryUnknown
 	}
 
 	// List images with same name as repository
 	images, err := m.runtime.ListImages(context.Background(), []string{}, &libimage.ListImagesOptions{
-		Filters: []string{"reference=" + named.Name() + ":*"},
+		Filters: []string{"reference=" + remoteRef.Name() + ":*"},
 	})
 	if err != nil {
 		return fmt.Errorf("failed to list references to repository: %w", err)
@@ -273,52 +207,35 @@ func (m *Manager) FetchByNamedRef(named reference.Named) error {
 
 	// Updates every reference
 	// For every images matching the repository name
+	var pullErrs *multierror.Error
 	for _, img := range images {
 		// Iterate over every name of this image
 		for _, name := range img.Names() {
-			ref, err := ParseRemoteRepoReference(name)
+			imgRemoteRef, err := reference.RemoteFromString(name)
 			// Filter HEAD reference
-			if err == ErrRemoteRepoReferenceContainsHeadTag {
-				continue
-			}
 			if err != nil {
-				return err
-			}
-
-			// Filter name that don't match repository name
-			if ref.Name() != named.Name() {
+				logrus.Debugf("skipping %q because of error: %v", name, err)
 				continue
 			}
 
-			// Pull reference
-			err = m.pullRef(ref)
+			// Filter image name that don't match repository name
+			if imgRemoteRef.Name() != remoteRef.Name() {
+				continue
+			}
+
+			// Pull image
+			_, err = m.pullRef(remoteRef)
 			if err != nil {
-				return err
+				multierror.Append(pullErrs, err)
 			}
 		}
 	}
 
-	// Now pull the given reference
-	return m.pullRef(named)
+	return pullErrs
 }
 
-func (m *Manager) Add(repo string, dest string, options AddOptions, sources ...string) error {
-	ref, err := ParseRepoName(repo)
-	if err != nil {
-		return err
-	}
-
-	return m.AddByNamedRef(ref, dest, options, sources...)
-}
-
-// Add commit the given files.
-func (m *Manager) AddByNamedRef(repoRef reference.Named, dest string, options AddOptions, sources ...string) error {
-	err := validRepoName(repoRef)
-	if err != nil {
-		return err
-	}
-	repoHeadRef := repoHeadString(repoRef)
-
+// Add commit the given source files to the HEAD of the given repository name.
+func (m *Manager) Add(repoName reference.Named, dest string, options AddOptions, sources ...string) error {
 	for i, src := range sources {
 		srcURL, err := url.Parse(src)
 		if err != nil {
@@ -336,7 +253,7 @@ func (m *Manager) AddByNamedRef(repoRef reference.Named, dest string, options Ad
 		}
 	}
 
-	builder, err := m.repoBuilder(repoRef, options.ReportWriter)
+	builder, err := m.repoBuilder(repoName, options.ReportWriter)
 	if err != nil {
 		return err
 	}
@@ -350,21 +267,21 @@ func (m *Manager) AddByNamedRef(repoRef reference.Named, dest string, options Ad
 	createdBy := fmt.Sprintf("ADD --chown=%q --chmod=%q %v %v",
 		options.Chown, options.Chmod, strings.Join(sources, ", "), dest)
 
-	return m.commit(builder, repoHeadRef, CommitOptions{
+	return m.commit(builder, repoName, CommitOptions{
 		CreatedBy:    createdBy,
 		Message:      options.Message,
 		ReportWriter: options.ReportWriter,
 	})
 }
 
-func (m *Manager) repoBuilder(repoRef reference.Named, reportWriter io.Writer) (*buildah.Builder, error) {
-	repoHeadRef := repoHeadString(repoRef)
+func (m *Manager) repoBuilder(repoName reference.Named, reportWriter io.Writer) (*buildah.Builder, error) {
+	repoHeadRef := reference.LocalHeadFromNamed(repoName)
 
 	builder, err := buildah.NewBuilder(context.Background(), m.store, buildah.BuilderOptions{
 		Args:                  nil,
-		FromImage:             repoHeadRef,
+		FromImage:             repoHeadRef.String(),
 		ContainerSuffix:       "ocitree",
-		Container:             repoRef.Name(),
+		Container:             repoName.Name(),
 		PullPolicy:            buildah.PullNever,
 		Registry:              "",
 		BlobDirectory:         "",
@@ -399,8 +316,9 @@ func (m *Manager) repoBuilder(repoRef reference.Named, reportWriter io.Writer) (
 	return builder, nil
 }
 
-func (m *Manager) commit(builder *buildah.Builder, repoHeadRef string, options CommitOptions) error {
-	imgRef, err := storageTransport.Transport.ParseStoreReference(m.store, repoHeadRef)
+func (m *Manager) commit(builder *buildah.Builder, repoName reference.Named, options CommitOptions) error {
+	imgRef, err := storageTransport.Transport.ParseStoreReference(
+		m.store, reference.LocalHeadFromNamed(repoName).String())
 	if err != nil {
 		return fmt.Errorf("failed to retrieve storage reference of HEAD of repository: %w", err)
 	}
@@ -476,17 +394,8 @@ func (ao *AddOptions) toAddAndCopyOptions() buildah.AddAndCopyOptions {
 	}
 }
 
-func (m *Manager) Exec(repo string, options ExecOptions, args ...string) error {
-	ref, err := ParseRepoName(repo)
-	if err != nil {
-		return err
-	}
-
-	return m.ExecByNamedRef(ref, options, args...)
-}
-
-func (m *Manager) ExecByNamedRef(repoRef reference.Named, options ExecOptions, args ...string) error {
-	builder, err := m.repoBuilder(repoRef, nil)
+func (m *Manager) Exec(repoName reference.Named, options ExecOptions, args ...string) error {
+	builder, err := m.repoBuilder(repoName, nil)
 	if err != nil {
 		return err
 	}
@@ -533,7 +442,7 @@ func (m *Manager) ExecByNamedRef(repoRef reference.Named, options ExecOptions, a
 		return fmt.Errorf("failed to execute command: %w", err)
 	}
 
-	return m.commit(builder, repoHeadString(repoRef), CommitOptions{
+	return m.commit(builder, repoName, CommitOptions{
 		CreatedBy:    "EXEC " + strings.Join(args, " "),
 		Message:      options.Message,
 		ReportWriter: options.ReportWriter,

@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/negrel/ocitree/pkg/libocitree"
+	"github.com/negrel/ocitree/pkg/reference"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )
@@ -23,13 +24,12 @@ var execCmd = &cobra.Command{
 		if len(args) == 0 {
 			return errors.New("a repository name must be specified")
 		}
-		repoName, err := libocitree.ParseRepoName(args[0])
-		if err != nil {
-			return err
-		}
-
 		if len(args) == 1 {
 			return errors.New("a command must be specified")
+		}
+		repoName, err := reference.NameFromString(args[0])
+		if err != nil {
+			return err
 		}
 		exec := args[1:]
 
@@ -48,7 +48,7 @@ var execCmd = &cobra.Command{
 		flags := cmd.Flags()
 		message, _ := flags.GetString("message")
 
-		err = manager.ExecByNamedRef(repoName, libocitree.ExecOptions{
+		err = manager.Exec(repoName, libocitree.ExecOptions{
 			Stdin:        os.Stdin,
 			Stdout:       os.Stdout,
 			Stderr:       os.Stderr,
@@ -63,4 +63,3 @@ var execCmd = &cobra.Command{
 		return nil
 	},
 }
-

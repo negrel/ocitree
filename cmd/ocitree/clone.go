@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"github.com/negrel/ocitree/pkg/libocitree"
+	"github.com/negrel/ocitree/pkg/reference"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )
@@ -26,7 +27,7 @@ var cloneCmd = &cobra.Command{
 		if len(args) > 1 {
 			return errors.New("too many arguments specified")
 		}
-		repoRef, err := libocitree.ParseRemoteRepoReference(args[0])
+		repoRef, err := reference.RemoteFromString(args[0])
 		if err != nil {
 			return err
 		}
@@ -43,7 +44,7 @@ var cloneCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
-		err = manager.CloneByNamedRef(repoRef)
+		err = manager.Clone(repoRef)
 		if err != nil {
 			logrus.Errorf("failed to clone repository %q: %v", repoRef, err)
 			os.Exit(1)
