@@ -44,30 +44,23 @@ var checkoutCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
-		beforeCheckout, err := manager.Repository(repoRef)
+		repo, err := manager.Repository(repoRef)
 		if err != nil {
-			logrus.Errorf("failed to find a repository before checkout: %v", err)
+			logrus.Errorf("failed to find a repository: %v", err)
 			os.Exit(1)
 		}
-
-		err = manager.Checkout(repoRef)
-		if err != nil {
-			logrus.Errorf("failed to checkout repository %q to reference %q: %v", repoRef.Name(), repoRef.String(), err)
-			os.Exit(1)
-		}
-
-		afterCheckout, err := manager.Repository(repoRef)
-		if err != nil {
-			logrus.Errorf("failed to find a repository after checkout: %v", err)
-			os.Exit(1)
-		}
-
-		beforeIDs := beforeCheckout.ID()[:16]
-		if tags, err := beforeCheckout.Tags(); err == nil {
+		beforeIDs := repo.ID()[:16]
+		if tags := repo.HeadTags(); len(tags) > 0 {
 			beforeIDs = fmt.Sprintf("%q (%v)", tags, beforeIDs)
 		}
-		afterID := fmt.Sprintf("%q (%v)", repoRef.Tag(), afterCheckout.ID()[:16])
 
+		err = repo.Checkout(repoRef)
+		if err != nil {
+			logrus.Errorf("failed to checkout repository %q to tag %q: %v", repoRef.Name(), repoRef.Tag(), err)
+			os.Exit(1)
+		}
+
+		afterID := fmt.Sprintf("%q (%v)", repoRef.Tag(), repo.ID()[:16])
 		fmt.Printf("Previous HEAD position was %v\n", beforeIDs)
 		fmt.Printf("Switched to %v\n", afterID)
 

@@ -78,6 +78,11 @@ func (m *Manager) lookupImage(ref reference.LocalRepository) (*libimage.Image, e
 	return img, nil
 }
 
+// addNames adds the given names to image with the given ID.
+func (m *Manager) addNames(id string, names []string) error {
+	return m.store.AddNames(id, names)
+}
+
 // LocalRepositoryExist returns true if a local repository with the given name
 // exist.
 func (m *Manager) LocalRepositoryExist(name reference.Named) bool {
@@ -182,27 +187,6 @@ func (m *Manager) pullRef(ref reference.RemoteRepository, options *PullOptions) 
 		},
 		AllTags: false,
 	})
-}
-
-// Checkout moves repository's HEAD associated to the given reference name
-// to the given reference.
-// Name of the repository is extracted from the given reference.
-func (m *Manager) Checkout(ref reference.LocalRepository) error {
-	if !m.LocalRepositoryExist(ref) {
-		return ErrLocalRepositoryUnknown
-	}
-
-	img, err := m.lookupImage(ref)
-	if err != nil {
-		return fmt.Errorf("local reference not found: %v", err)
-	}
-
-	err = m.store.AddNames(img.ID(), []string{reference.LocalHeadFromNamed(ref).String()})
-	if err != nil {
-		return err
-	}
-
-	return nil
 }
 
 // FetchOptions holds fetch options.

@@ -7,3 +7,6 @@ type Named = reference.Named
 
 // NamedTagged is an object including a name and tag.
 type NamedTagged = reference.NamedTagged
+
+// Tagged is an object which has a tag.
+type Tagged = reference.Tagged
