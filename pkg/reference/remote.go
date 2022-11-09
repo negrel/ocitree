@@ -11,7 +11,7 @@ var (
 )
 
 var (
-	LatestTag = "latest"
+	Latest = "latest"
 )
 
 var _ NamedTagged = RemoteRepository{}
@@ -25,9 +25,9 @@ type RemoteRepository struct {
 // RemoteFromString returns a RemoteRepository reference from the given string
 // after validating and normalizing it. An error is returned if the reference is invalid.
 func RemoteFromString(remoteRef string) (RemoteRepository, error) {
-	ref, err := parseRef(remoteRef)
+	ref, err := reference.ParseNormalizedNamed(remoteRef)
 	if err != nil {
-		return RemoteRepository{}, err
+		return RemoteRepository{}, wrapParseError(remoteRepositoryParseErrorType, err)
 	}
 
 	namedTagged, isTagged := ref.(NamedTagged)
@@ -36,7 +36,7 @@ func RemoteFromString(remoteRef string) (RemoteRepository, error) {
 	}
 
 	if !isTagged {
-		namedTagged, _ = reference.WithTag(ref, LatestTag)
+		namedTagged, _ = reference.WithTag(ref, Latest)
 	}
 
 	return RemoteRepository{named: namedTagged}, nil
@@ -45,8 +45,18 @@ func RemoteFromString(remoteRef string) (RemoteRepository, error) {
 // RemoteLatestFromNamed returns a new RemoteReference with a "latest" tag and
 // name from the given Named.
 func RemoteLatestFromNamed(named Named) RemoteRepository {
-	r, _ := RemoteFromString(named.Name() + ":" + LatestTag)
+	r, _ := RemoteFromString(named.Name() + ":" + Latest)
 	return r
+}
+
+// RemoteFromNamedTagged returns a new RemoteReference with the given
+// tag and name. An error is returned if tagged is HEAD.
+func RemoteFromNamedTagged(named Named, tagged Tagged) (RemoteRepository, error) {
+	if tagged.Tag() == Head {
+		return RemoteRepository{}, ErrRemoteRepoReferenceContainsHeadTag
+	}
+
+	return RemoteFromString(named.Name() + ":" + tagged.Tag())
 }
 
 // Name implements Named

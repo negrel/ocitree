@@ -3,7 +3,7 @@ package reference
 import "github.com/containers/image/v5/docker/reference"
 
 const (
-	HeadTag = "HEAD"
+	Head = "HEAD"
 )
 
 var _ NamedTagged = LocalRepository{}
@@ -18,14 +18,14 @@ type LocalRepository struct {
 // LocalFromString returns a local repository reference from the given string
 // after validating and normalizing it. An error is returned if the reference is invalid.
 func LocalFromString(localRef string) (LocalRepository, error) {
-	ref, err := parseRef(localRef)
+	ref, err := reference.ParseNormalizedNamed(localRef)
 	if err != nil {
-		return LocalRepository{}, err
+		return LocalRepository{}, wrapParseError(localRepositoryParseErrorType, err)
 	}
 
 	namedTagged, isTagged := ref.(NamedTagged)
 	if !isTagged {
-		namedTagged, _ = reference.WithTag(ref, HeadTag)
+		namedTagged, _ = reference.WithTag(ref, Head)
 	}
 
 	return LocalRepository{named: namedTagged}, nil
@@ -39,7 +39,14 @@ func LocalFromRemote(remoteRef RemoteRepository) LocalRepository {
 // LocalHeadFromNamed returns a new LocalRepository with "HEAD" tag and
 // name of the given named.
 func LocalHeadFromNamed(ref Named) LocalRepository {
-	l, _ := LocalFromString(ref.Name() + ":" + HeadTag)
+	l, _ := LocalFromString(ref.Name() + ":" + Head)
+	return l
+}
+
+// LocalFromNamedTagged returns a new LocalRepositry with the given tag and
+// name.
+func LocalFromNamedTagged(named Named, tagged Tagged) LocalRepository {
+	l, _ := LocalFromString(named.Name() + ":" + tagged.Tag())
 	return l
 }
 

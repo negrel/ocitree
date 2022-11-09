@@ -19,7 +19,7 @@ func TestRemoteReference(t *testing.T) {
 		{
 			name:          "EmptyInvalid",
 			reference:     "",
-			expectedError: wrapParseError(reference.ErrReferenceInvalidFormat),
+			expectedError: wrapParseError(remoteRepositoryParseErrorType, reference.ErrReferenceInvalidFormat),
 		},
 		{
 			name:              "FullyQualified/WithCustomDomain/Valid",
@@ -50,7 +50,7 @@ func TestRemoteReference(t *testing.T) {
 		{
 			name:          "FullyQualified/WithEmptyTag/Invalid",
 			reference:     "docker.io/library/archlinux:",
-			expectedError: wrapParseError(reference.ErrReferenceInvalidFormat),
+			expectedError: wrapParseError(remoteRepositoryParseErrorType, reference.ErrReferenceInvalidFormat),
 		},
 		{
 			name:              "FullyQualifiedLocalhostValid",
@@ -69,17 +69,17 @@ func TestRemoteReference(t *testing.T) {
 		{
 			name:          "FullyQualified/InvalidTag",
 			reference:     "docker.io/library/archlinux:...",
-			expectedError: wrapParseError(reference.ErrReferenceInvalidFormat),
+			expectedError: wrapParseError(remoteRepositoryParseErrorType, reference.ErrReferenceInvalidFormat),
 		},
 		{
 			name:          "InvalidDomain",
 			reference:     ".docker.io/library/archlinux:latest",
-			expectedError: wrapParseError(reference.ErrReferenceInvalidFormat),
+			expectedError: wrapParseError(remoteRepositoryParseErrorType, reference.ErrReferenceInvalidFormat),
 		},
 		{
 			name:          "InvalidName",
 			reference:     "docker.io/library/§archlinux§:latest",
-			expectedError: wrapParseError(reference.ErrReferenceInvalidFormat),
+			expectedError: wrapParseError(remoteRepositoryParseErrorType, reference.ErrReferenceInvalidFormat),
 		},
 		{
 			name:              "MissingDomain/Valid",

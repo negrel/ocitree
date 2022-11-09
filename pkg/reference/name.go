@@ -24,7 +24,7 @@ type Name struct {
 func NameFromString(name string) (Name, error) {
 	ref, err := reference.ParseNormalizedNamed(name)
 	if err != nil {
-		return Name{}, wrapParseError(err)
+		return Name{}, wrapParseError(repositoryNameParseErrorType, err)
 	}
 
 	named, isNamed := ref.(Named)

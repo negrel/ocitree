@@ -2,36 +2,51 @@ package reference
 
 import (
 	"fmt"
-
-	"github.com/containers/image/v5/docker/reference"
 )
 
 var _ error = ParseError{}
 
-type ParseError struct {
-	err error
+type parseErrorType uint
+
+const (
+	localRepositoryParseErrorType parseErrorType = iota
+	remoteRepositoryParseErrorType
+	repositoryNameParseErrorType
+	repositoryTagParseErrorType
+)
+
+func (rk parseErrorType) String() string {
+	switch rk {
+	case localRepositoryParseErrorType:
+		return "local reference"
+	case remoteRepositoryParseErrorType:
+		return "remote reference"
+	case repositoryNameParseErrorType:
+		return "name"
+	case repositoryTagParseErrorType:
+		return "tag"
+	default:
+		panic("unknown reference kind")
+	}
 }
 
-func wrapParseError(err error) error {
+type ParseError struct {
+	etype parseErrorType
+	err   error
+}
+
+func wrapParseError(etype parseErrorType, err error) error {
 	if err == nil {
 		panic("can't wrap nil error")
 	}
 
 	return ParseError{
-		err: err,
+		etype: etype,
+		err:   err,
 	}
 }
 
 // Error implements error
 func (e ParseError) Error() string {
-	return fmt.Sprintf("failed to parse repository reference/name: %v", e.err)
-}
-
-func parseRef(refStr string) (Named, error) {
-	ref, err := reference.ParseNormalizedNamed(refStr)
-	if err != nil {
-		return nil, wrapParseError(err)
-	}
-
-	return ref, nil
+	return fmt.Sprintf("failed to parse repository %v: %v", e.etype, e.err)
 }

@@ -8,7 +8,6 @@ import (
 )
 
 func TestName(t *testing.T) {
-
 	for _, test := range []struct {
 		name          string
 		refName       string
@@ -19,7 +18,7 @@ func TestName(t *testing.T) {
 			name:          "EmptyName",
 			refName:       "",
 			expectedName:  "",
-			expectedError: wrapParseError(reference.ErrReferenceInvalidFormat),
+			expectedError: wrapParseError(repositoryNameParseErrorType, reference.ErrReferenceInvalidFormat),
 		},
 		{
 			name:         "Minimal/Valid",
@@ -44,7 +43,7 @@ func TestName(t *testing.T) {
 		{
 			name:          "InvalidName",
 			refName:       "§archlinux",
-			expectedError: wrapParseError(reference.ErrReferenceInvalidFormat),
+			expectedError: wrapParseError(repositoryNameParseErrorType, reference.ErrReferenceInvalidFormat),
 		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
