@@ -16,6 +16,7 @@ var (
 type imageStore interface {
 	addNames(string, []string) error
 	lookupImage(reference.LocalRepository) (*libimage.Image, error)
+	listImages(filters ...string) ([]*libimage.Image, error)
 }
 
 // Repository is an object holding the history of a rootfs (OCI/Docker image).
@@ -78,20 +79,48 @@ func (r *Repository) HeadRef() reference.LocalRepository {
 	return r.headRef
 }
 
-// Tags returns other tags pointing to the same commit as HEAD.
-func (r *Repository) Tags() ([]string, error) {
-	names, err := r.head.NamedTaggedRepoTags()
-	if err != nil {
-		return nil, fmt.Errorf("failed to retrieve repository names: %w", err)
-	}
-
-	tags := make([]string, 0)
+// HeadTags returns other tags pointing to the same commit as HEAD.
+func (r *Repository) HeadTags() []string {
+	names := r.head.Names()
+	tags := make([]string, 0, len(names))
 
 	for _, name := range names {
-		if name.Name() == r.Name() {
-			if t := name.Tag(); t != reference.HeadTag {
-				tags = append(tags, t)
+		ref, err := reference.RemoteFromString(name)
+		if err != nil {
+			continue
+		}
+
+		if ref.Name() == r.Name() {
+			tags = append(tags, ref.Tag())
+		}
+	}
+
+	return tags
+}
+
+// OtherTags returns tags associated to this repository without tags associated to
+// HEAD.
+func (r *Repository) OtherTags() ([]string, error) {
+	images, err := r.store.listImages("reference=" + r.Name() + ":*")
+	if err != nil {
+		return nil, fmt.Errorf("failed to list repository reference: %w", err)
+	}
+
+	tags := make([]string, 0, len(images))
+
+	for _, img := range images {
+		if img.ID() == r.ID() {
+			continue
+		}
+
+		imgNames := img.Names()
+		for _, name := range imgNames {
+			imgRef, err := reference.RemoteFromString(name)
+			if err != nil {
+				continue
 			}
+
+			tags = append(tags, imgRef.Tag())
 		}
 	}
 

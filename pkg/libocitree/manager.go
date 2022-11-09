@@ -35,6 +35,13 @@ type Manager struct {
 	runtime *libimage.Runtime
 }
 
+// listImages implements imageStore
+func (m *Manager) listImages(filters ...string) ([]*libimage.Image, error) {
+	return m.runtime.ListImages(context.Background(), nil, &libimage.ListImagesOptions{
+		Filters: filters,
+	})
+}
+
 // NewManagerFromStore returns a new Manager using the given store.
 // An error is returned if libimage.Runtime can't be created using the given
 // store and system context.
