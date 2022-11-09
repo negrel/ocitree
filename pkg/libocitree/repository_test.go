@@ -118,6 +118,73 @@ func TestRepositoryOtherTags(t *testing.T) {
 	require.Equal(t, []string{}, tags)
 }
 
+func TestRepositoryAddTag(t *testing.T) {
+	manager, cleanup := newTestManager(t)
+	defer cleanup()
+
+	// Clone alpine
+	ref, err := reference.RemoteFromString("alpine:latest")
+	require.NoError(t, err)
+	err = manager.Clone(ref, CloneOptions{
+		PullOptions: PullOptions{
+			MaxRetries:   0,
+			RetryDelay:   0,
+			ReportWriter: os.Stderr,
+		},
+	})
+	require.NoError(t, err)
+
+	repo, err := manager.Repository(ref)
+	require.NoError(t, err)
+
+	// Add a tag
+	tag, err := reference.TagFromString("edge")
+	require.NoError(t, err)
+	err = repo.AddTag(tag)
+	require.NoError(t, err)
+
+	// Check image is tagged
+	localRef := reference.LocalFromNamedTagged(ref, tag)
+	img, _, err := manager.runtime.LookupImage(localRef.String(), nil)
+	require.NoError(t, err)
+	require.NotNil(t, img)
+	require.Equal(t, repo.ID(), img.ID())
+
+	// Check repository object is up to date
+	require.Contains(t, repo.HeadTags(), tag.String(), "repository.HeadTags doesn't contain added tag")
+}
+
+func TestRepositoryRemoveTag(t *testing.T) {
+	manager, cleanup := newTestManager(t)
+	defer cleanup()
+
+	// Clone alpine
+	ref, err := reference.RemoteFromString("alpine:latest")
+	require.NoError(t, err)
+	err = manager.Clone(ref, CloneOptions{
+		PullOptions: PullOptions{
+			MaxRetries:   0,
+			RetryDelay:   0,
+			ReportWriter: os.Stderr,
+		},
+	})
+	require.NoError(t, err)
+
+	repo, err := manager.Repository(ref)
+	require.NoError(t, err)
+
+	// Remove latest tag
+	err = repo.RemoveTag(ref)
+	require.NoError(t, err)
+
+	// Check image can't be found anymore
+	_, _, err = manager.runtime.LookupImage(ref.String(), nil)
+	require.Error(t, err)
+
+	// Check repository object is up to date
+	require.Equal(t, []string{}, repo.HeadTags(), "repository.HeadTags contain removed tag")
+}
+
 func TestRepositoryCheckout(t *testing.T) {
 	manager, cleanup := newTestManager(t)
 	defer cleanup()

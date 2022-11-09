@@ -127,6 +127,26 @@ func (r *Repository) OtherTags() ([]string, error) {
 	return tags, nil
 }
 
+// AddTag adds the given tag to HEAD.
+func (r *Repository) AddTag(tag reference.Tagged) error {
+	ref, err := reference.RemoteFromString(r.Name() + ":" + tag.Tag())
+	if err != nil {
+		return err
+	}
+
+	return r.head.Tag(ref.String())
+}
+
+// RemoveTag returns the given tag from HEAD.
+func (r *Repository) RemoveTag(tag reference.Tagged) error {
+	ref, err := reference.RemoteFromString(r.Name() + ":" + tag.Tag())
+	if err != nil {
+		return err
+	}
+
+	return r.head.Untag(ref.String())
+}
+
 // Commits returns the commits history of this repository.
 func (r *Repository) Commits() ([]Commit, error) {
 	history, err := r.head.History(context.Background())
@@ -154,7 +174,7 @@ func (r *Repository) Unmount() error {
 
 func findRepoName(names []reference.NamedTagged) string {
 	for _, name := range names {
-		if name.Tag() == reference.HeadTag {
+		if name.Tag() == reference.Head {
 			return name.Name()
 		}
 	}
