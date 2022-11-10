@@ -201,7 +201,9 @@ type FetchOptions struct {
 	PullOptions
 }
 
-// Fetch updates every repository reference.
+// Fetch fetches multiple version of the given repository reference.
+// It starts by updating every HEAD tags and then finally, it downloads
+// the given remote reference.
 func (m *Manager) Fetch(remoteRef reference.RemoteRepository, options FetchOptions) error {
 	if !m.LocalRepositoryExist(reference.NameFromNamed(remoteRef)) {
 		return ErrLocalRepositoryUnknown
@@ -234,14 +236,20 @@ func (m *Manager) Fetch(remoteRef reference.RemoteRepository, options FetchOptio
 			}
 
 			// Pull image
-			_, err = m.pullRef(remoteRef, &options.PullOptions)
+			_, err = m.pullRef(imgRemoteRef, &options.PullOptions)
 			if err != nil {
 				multierror.Append(pullErrs, err)
 			}
 		}
 	}
 
-	return pullErrs
+	// Pull the given reference now
+	_, err = m.pullRef(remoteRef, &options.PullOptions)
+	if err != nil {
+		multierror.Append(pullErrs, err)
+	}
+
+	return pullErrs.ErrorOrNil()
 }
 
 // Add commit the given source files to the HEAD of the given repository name.

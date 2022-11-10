@@ -179,6 +179,59 @@ func TestManagerRepositories(t *testing.T) {
 	}
 }
 
+func TestManagerFetch(t *testing.T) {
+	manager, cleanup := newTestManager(t)
+	defer cleanup()
+
+	pullOptions := PullOptions{
+		MaxRetries:   0,
+		RetryDelay:   0,
+		ReportWriter: os.Stderr,
+	}
+
+	ref, err := reference.RemoteFromString("alpine:3.15")
+	require.NoError(t, err)
+	headRef := reference.LocalHeadFromNamed(ref)
+
+	err = manager.Clone(ref, CloneOptions{
+		PullOptions: pullOptions,
+	})
+	require.NoError(t, err)
+
+	img, _, err := manager.runtime.LookupImage(reference.LocalFromRemote(ref).String(), nil)
+	require.NoError(t, err)
+
+	// Add a latest tag
+	latestRef := reference.RemoteLatestFromNamed(ref)
+	err = img.Tag(latestRef.String())
+	require.NoError(t, err)
+	require.Equal(t, []string{headRef.String(), ref.String(), latestRef.String()}, img.Names())
+
+	// Fetch all HEAD tags + the given one (e.g 3.15, 3.14 and latest)
+	ref2, err := reference.RemoteFromString("alpine:3.14")
+	require.NoError(t, err)
+	err = manager.Fetch(ref2, FetchOptions{
+		PullOptions: pullOptions,
+	})
+	require.NoError(t, err)
+
+	// We should have 3 images now, 3.15, 3.14 and latest
+	// let's test 3.15
+	img, _, err = manager.runtime.LookupImage(ref.String(), nil)
+	require.NoError(t, err)
+	require.Equal(t, []string{reference.LocalHeadFromNamed(ref).String(), ref.String()}, img.Names())
+
+	// latest now
+	img, _, err = manager.runtime.LookupImage(latestRef.String(), nil)
+	require.NoError(t, err)
+	require.Equal(t, []string{latestRef.String()}, img.Names())
+
+	// And 3.14
+	img, _, err = manager.runtime.LookupImage(ref2.String(), nil)
+	require.NoError(t, err)
+	require.Equal(t, []string{ref2.String()}, img.Names())
+}
+
 func newTestManager(t *testing.T) (manager *Manager, cleanup func()) {
 	store, systemContext, workdir := newStoreAndSystemContext(t)
 
