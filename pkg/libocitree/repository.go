@@ -14,7 +14,6 @@ var (
 )
 
 type imageStore interface {
-	addNames(string, []string) error
 	lookupImage(reference.LocalRepository) (*libimage.Image, error)
 	listImages(filters ...string) ([]*libimage.Image, error)
 }
@@ -209,7 +208,7 @@ func (r *Repository) Checkout(tag reference.Tagged) error {
 	}
 
 	// Tag head
-	err = r.store.addNames(img.ID(), []string{reference.LocalHeadFromNamed(ref).String()})
+	err = img.Tag(reference.LocalHeadFromNamed(ref).String())
 	if err != nil {
 		return fmt.Errorf("failed to add HEAD tag: %w", err)
 	}

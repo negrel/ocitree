@@ -85,11 +85,6 @@ func (m *Manager) lookupImage(ref reference.LocalRepository) (*libimage.Image, e
 	return img, nil
 }
 
-// addNames adds the given names to image with the given ID.
-func (m *Manager) addNames(id string, names []string) error {
-	return m.store.AddNames(id, names)
-}
-
 // LocalRepositoryExist returns true if a local repository with the given name
 // exist.
 func (m *Manager) LocalRepositoryExist(name reference.Named) bool {
