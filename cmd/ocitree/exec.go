@@ -14,7 +14,7 @@ func init() {
 	rootCmd.AddCommand(execCmd)
 	flagset := execCmd.PersistentFlags()
 	setupStoreOptionsFlags(flagset)
-	flagset.StringP("message", "m", "", "commit message")
+	setupCommitOptionsFlags(flagset)
 }
 
 var execCmd = &cobra.Command{
@@ -55,7 +55,7 @@ var execCmd = &cobra.Command{
 		message, _ := flags.GetString("message")
 
 		err = repo.Exec(libocitree.ExecOptions{
-			Stdin:        os.Stdin,
+			Stdin:        nil,
 			Stdout:       os.Stdout,
 			Stderr:       os.Stderr,
 			Message:      message + "\n",

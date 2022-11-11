@@ -26,3 +26,13 @@ func containersStore() (storage.Store, error) {
 
 	return storage.GetStore(storeOptions)
 }
+
+type commitOptions struct {
+	message string
+}
+
+var commitOpts = commitOptions{}
+
+func setupCommitOptionsFlags(flagset *pflag.FlagSet) {
+	flagset.StringVarP(&commitOpts.message, "message", "m", "", "commit message")
+}
