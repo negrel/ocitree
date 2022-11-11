@@ -14,7 +14,7 @@ func init() {
 	rootCmd.AddCommand(execCmd)
 	flagset := execCmd.PersistentFlags()
 	setupStoreOptionsFlags(flagset)
-	flagset.StringP("message", "m", "", "commit message")
+	setupCommitOptionsFlags(flagset)
 }
 
 var execCmd = &cobra.Command{
