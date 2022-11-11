@@ -1,5 +1,0 @@
-VERSION 0.6
-
-push:
-	BUILD ../+test
-
