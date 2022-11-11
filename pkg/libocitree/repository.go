@@ -4,8 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 
+	"github.com/containers/buildah"
 	"github.com/containers/common/libimage"
+	"github.com/containers/image/v5/types"
 	"github.com/negrel/ocitree/pkg/reference"
 )
 
@@ -16,6 +19,9 @@ var (
 type imageStore interface {
 	lookupImage(reference.LocalRepository) (*libimage.Image, error)
 	listImages(filters ...string) ([]*libimage.Image, error)
+	repoBuilder(reference.Named, io.Writer) (*buildah.Builder, error)
+	storageReference(reference.LocalRepository) types.ImageReference
+	systemContext() *types.SystemContext
 }
 
 // Repository is an object holding the history of a rootfs (OCI/Docker image).

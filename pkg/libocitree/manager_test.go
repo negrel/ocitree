@@ -3,8 +3,9 @@ package libocitree
 import (
 	"bytes"
 	"context"
-	"encoding/base64"
+	"math/rand"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -13,14 +14,20 @@ import (
 	"github.com/containers/image/v5/types"
 	"github.com/containers/storage"
 	"github.com/containers/storage/pkg/reexec"
+	"github.com/containers/storage/pkg/unshare"
 	"github.com/negrel/ocitree/pkg/reference"
 	"github.com/stretchr/testify/require"
 )
 
 func TestMain(m *testing.M) {
+	rand.Seed(time.Now().UnixNano())
+
 	if reexec.Init() {
 		return
 	}
+
+	unshare.MaybeReexecUsingUserNamespace(false)
+
 	os.Exit(m.Run())
 }
 
@@ -280,6 +287,20 @@ func tmpdir() (string, error) {
 	return tmpdir, err
 }
 
+func randomString(length uint) string {
+	charset := "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+
+	result := strings.Builder{}
+	result.Grow(int(length))
+
+	for i := uint(0); i < length; i++ {
+		chari := rand.Intn(len(charset))
+		result.WriteByte(charset[chari])
+	}
+
+	return result.String()
+}
+
 func randomCommitMessage() string {
-	return base64.StdEncoding.EncodeToString([]byte(time.Now().Format(time.RFC3339Nano)))
+	return randomString(128)
 }

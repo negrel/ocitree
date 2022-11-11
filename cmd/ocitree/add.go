@@ -52,12 +52,18 @@ var addCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
+		repo, err := manager.Repository(repoName)
+		if err != nil {
+			logrus.Errorf("repository not found: %v", err)
+			os.Exit(1)
+		}
+
 		flags := cmd.Flags()
 		chmod, _ := flags.GetString("chmod")
 		chown, _ := flags.GetString("chown")
 		message, _ := flags.GetString("message")
 
-		err = manager.Add(repoName, dest, libocitree.AddOptions{
+		err = repo.Add(dest, libocitree.AddOptions{
 			Chmod:        chmod,
 			Chown:        chown,
 			Message:      message,

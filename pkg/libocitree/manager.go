@@ -5,20 +5,15 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net/url"
-	"path/filepath"
 	"runtime"
-	"strings"
 	"time"
 
 	"github.com/containers/buildah"
-	"github.com/containers/buildah/define"
 	"github.com/containers/common/libimage"
 	"github.com/containers/common/pkg/config"
 	storageTransport "github.com/containers/image/v5/storage"
 	"github.com/containers/image/v5/types"
 	"github.com/containers/storage"
-	"github.com/containers/storage/pkg/archive"
 	"github.com/hashicorp/go-multierror"
 	"github.com/negrel/ocitree/pkg/reference"
 	"github.com/sirupsen/logrus"
@@ -33,6 +28,21 @@ var (
 type Manager struct {
 	store   storage.Store
 	runtime *libimage.Runtime
+}
+
+// systemContext implements imageStore
+func (m *Manager) systemContext() *types.SystemContext {
+	return m.runtime.SystemContext()
+}
+
+// storageReference implements imageStore
+func (m *Manager) storageReference(ref reference.LocalRepository) types.ImageReference {
+	r, err := storageTransport.Transport.NewStoreReference(m.store, ref, "")
+	if err != nil {
+		panic(err)
+	}
+
+	return r
 }
 
 // listImages implements imageStore
@@ -247,54 +257,12 @@ func (m *Manager) Fetch(remoteRef reference.RemoteRepository, options FetchOptio
 	return pullErrs.ErrorOrNil()
 }
 
-// Add commit the given source files to the HEAD of the given repository name.
-func (m *Manager) Add(repoName reference.Named, dest string, options AddOptions, sources ...string) error {
-	for i, src := range sources {
-		srcURL, err := url.Parse(src)
-		if err != nil {
-			return fmt.Errorf("failed to parse sources URL: %w", err)
-		}
-
-		// if filepath
-		if srcURL.Scheme == "" {
-			// get absolute path
-			absSrc, err := filepath.Abs(src)
-			if err != nil {
-				return fmt.Errorf("failed to find absolute path to source: %v", err)
-			}
-			sources[i] = absSrc
-		}
-	}
-
-	builder, err := m.repoBuilder(repoName, options.ReportWriter)
-	if err != nil {
-		return err
-	}
-	defer builder.Delete()
-
-	err = builder.Add(dest, false, options.toAddAndCopyOptions(), sources...)
-	if err != nil {
-		return fmt.Errorf("failed to add files to image: %w", err)
-	}
-
-	createdBy := fmt.Sprintf("ADD --chown=%q --chmod=%q %v %v",
-		options.Chown, options.Chmod, strings.Join(sources, ", "), dest)
-
-	return m.commit(builder, repoName, CommitOptions{
-		CreatedBy:    createdBy,
-		Message:      options.Message,
-		ReportWriter: options.ReportWriter,
-	})
-}
-
-func (m *Manager) repoBuilder(repoName reference.Named, reportWriter io.Writer) (*buildah.Builder, error) {
-	repoHeadRef := reference.LocalHeadFromNamed(repoName)
-
+func (m *Manager) repoBuilder(ref reference.Named, reportWriter io.Writer) (*buildah.Builder, error) {
 	builder, err := buildah.NewBuilder(context.Background(), m.store, buildah.BuilderOptions{
 		Args:                  nil,
-		FromImage:             repoHeadRef.String(),
+		FromImage:             ref.String(),
 		ContainerSuffix:       "ocitree",
-		Container:             repoName.Name(),
+		Container:             ref.Name(),
 		PullPolicy:            buildah.PullNever,
 		Registry:              "",
 		BlobDirectory:         "",
@@ -327,147 +295,4 @@ func (m *Manager) repoBuilder(repoName reference.Named, reportWriter io.Writer) 
 	}
 
 	return builder, nil
-}
-
-func (m *Manager) commit(builder *buildah.Builder, repoName reference.Named, options CommitOptions) error {
-	imgRef, err := storageTransport.Transport.ParseStoreReference(
-		m.store, reference.LocalHeadFromNamed(repoName).String())
-	if err != nil {
-		return fmt.Errorf("failed to retrieve storage reference of HEAD of repository: %w", err)
-	}
-
-	builder.SetHistoryComment(options.Message + "\n")
-	builder.SetCreatedBy("/bin/sh -c #(ocitree) " + options.CreatedBy)
-
-	_, _, _, err = builder.Commit(context.Background(), imgRef, buildah.CommitOptions{
-		PreferredManifestType: "",
-		Compression:           archive.Gzip,
-		SignaturePolicyPath:   "",
-		AdditionalTags:        nil,
-		ReportWriter:          options.ReportWriter,
-		HistoryTimestamp:      nil,
-		SystemContext:         m.runtime.SystemContext(),
-		IIDFile:               "",
-		Squash:                false,
-		OmitHistory:           false,
-		BlobDirectory:         "",
-		EmptyLayer:            false,
-		OmitTimestamp:         false,
-		SignBy:                "",
-		Manifest:              "",
-		MaxRetries:            0,
-		RetryDelay:            0,
-		OciEncryptConfig:      nil,
-		OciEncryptLayers:      nil,
-		UnsetEnvs:             nil,
-	})
-	if err != nil {
-		return fmt.Errorf("failed to commit repository: %w", err)
-	}
-
-	return nil
-}
-
-// CommitOptions contains options to add a commit to repository.
-type CommitOptions struct {
-	CreatedBy string
-	Message   string
-
-	ReportWriter io.Writer
-}
-
-// AddOptions holds option to Manager.Add method.
-type AddOptions struct {
-	//Chmod sets the access permissions of the destination content.
-	Chmod string
-	// Chown is a spec for the user who should be given ownership over the
-	// newly-added content, potentially overriding permissions which would
-	// otherwise be set to 0:0.
-	Chown string
-
-	Message string
-
-	ReportWriter io.Writer
-}
-
-func (ao *AddOptions) toAddAndCopyOptions() buildah.AddAndCopyOptions {
-	return buildah.AddAndCopyOptions{
-		Chmod:             ao.Chmod,
-		Chown:             ao.Chown,
-		PreserveOwnership: false,
-		Hasher:            nil,
-		Excludes:          nil,
-		IgnoreFile:        "",
-		ContextDir:        "/",
-		IDMappingOptions:  nil,
-		DryRun:            false,
-		StripSetuidBit:    false,
-		StripSetgidBit:    false,
-		StripStickyBit:    false,
-	}
-}
-
-func (m *Manager) Exec(repoName reference.Named, options ExecOptions, args ...string) error {
-	builder, err := m.repoBuilder(repoName, nil)
-	if err != nil {
-		return err
-	}
-	defer builder.Delete()
-
-	err = builder.Run(args, buildah.RunOptions{
-		Logger:              logrus.StandardLogger(),
-		Hostname:            "",
-		Isolation:           define.IsolationChroot,
-		Runtime:             "",
-		Args:                nil,
-		NoHosts:             false,
-		NoPivot:             false,
-		Mounts:              nil,
-		Env:                 nil,
-		User:                "",
-		WorkingDir:          "",
-		ContextDir:          "",
-		Shell:               "",
-		Cmd:                 nil,
-		Entrypoint:          nil,
-		NamespaceOptions:    nil,
-		ConfigureNetwork:    0,
-		CNIPluginPath:       "",
-		CNIConfigDir:        "",
-		Terminal:            0,
-		TerminalSize:        nil,
-		Stdin:               options.Stdin,
-		Stdout:              options.Stdout,
-		Stderr:              options.Stderr,
-		Quiet:               true,
-		AddCapabilities:     nil,
-		DropCapabilities:    nil,
-		Devices:             []define.BuildahDevice{},
-		Secrets:             nil,
-		SSHSources:          nil,
-		RunMounts:           nil,
-		StageMountPoints:    nil,
-		ExternalImageMounts: nil,
-		SystemContext:       m.runtime.SystemContext(),
-		CgroupManager:       "",
-	})
-	if err != nil {
-		return fmt.Errorf("failed to execute command: %w", err)
-	}
-
-	return m.commit(builder, repoName, CommitOptions{
-		CreatedBy:    "EXEC " + strings.Join(args, " "),
-		Message:      options.Message,
-		ReportWriter: options.ReportWriter,
-	})
-}
-
-// ExecOptions holds options for Manager.Exec method.
-type ExecOptions struct {
-	Stdin  io.Reader
-	Stdout io.Writer
-	Stderr io.Writer
-
-	Message      string
-	ReportWriter io.Writer
 }

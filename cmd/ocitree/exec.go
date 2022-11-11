@@ -45,16 +45,22 @@ var execCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
+		repo, err := manager.Repository(repoName)
+		if err != nil {
+			logrus.Errorf("repository not found: %v", err)
+			os.Exit(1)
+		}
+
 		flags := cmd.Flags()
 		message, _ := flags.GetString("message")
 
-		err = manager.Exec(repoName, libocitree.ExecOptions{
+		err = repo.Exec(libocitree.ExecOptions{
 			Stdin:        os.Stdin,
 			Stdout:       os.Stdout,
 			Stderr:       os.Stderr,
 			Message:      message + "\n",
 			ReportWriter: os.Stderr,
-		}, exec...)
+		}, exec[0], exec[1:]...)
 		if err != nil {
 			logrus.Errorf("failed to exec command and commit: %v", err)
 			os.Exit(1)
