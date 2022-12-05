@@ -9,11 +9,13 @@ import (
 	"time"
 
 	"github.com/containers/buildah"
+	"github.com/containers/buildah/define"
 	"github.com/containers/common/libimage"
 	"github.com/containers/common/pkg/config"
 	storageTransport "github.com/containers/image/v5/storage"
 	"github.com/containers/image/v5/types"
 	"github.com/containers/storage"
+	"github.com/containers/storage/pkg/archive"
 	"github.com/hashicorp/go-multierror"
 	"github.com/negrel/ocitree/pkg/reference"
 	"github.com/sirupsen/logrus"
@@ -26,13 +28,13 @@ var (
 
 // Manager defines a repositories manager.
 type Manager struct {
-	store   storage.Store
-	runtime *libimage.Runtime
+	store storage.Store
+	rt    *libimage.Runtime
 }
 
 // systemContext implements imageStore
 func (m *Manager) systemContext() *types.SystemContext {
-	return m.runtime.SystemContext()
+	return m.rt.SystemContext()
 }
 
 // storageReference implements imageStore
@@ -47,9 +49,49 @@ func (m *Manager) storageReference(ref reference.LocalRepository) types.ImageRef
 
 // listImages implements imageStore
 func (m *Manager) listImages(filters ...string) ([]*libimage.Image, error) {
-	return m.runtime.ListImages(context.Background(), nil, &libimage.ListImagesOptions{
+	return m.rt.ListImages(context.Background(), nil, &libimage.ListImagesOptions{
 		Filters: filters,
 	})
+}
+
+func (m *Manager) diff(from, to *Commit) (io.ReadCloser, error) {
+	img, err := m.store.Image(to.ID())
+	if err != nil {
+		return nil, fmt.Errorf("failed to retrieve image associated to commit %v: %w", to.ID(), err)
+	}
+
+	parentImg, err := m.store.Image(from.ID())
+	if err != nil {
+		return nil, fmt.Errorf("failed to retrieve image associated to commit %v: %w", from.ID(), err)
+	}
+
+	compression := archive.Uncompressed
+	diff, err := m.store.Diff(parentImg.TopLayer, img.TopLayer, &storage.DiffOptions{
+		Compression: &compression,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to compute diff between layer %v and %v: %w", parentImg.TopLayer, img.TopLayer, err)
+	}
+
+	return diff, nil
+}
+
+// lookupImage returns the image associated to the given ref.
+// This function expect a fully qualified reference and will use default values
+// ("latest" for tag, "docker.io" for registry) if not.
+func (m *Manager) lookupImage(ref reference.LocalRepository) (*libimage.Image, error) {
+	img, _, err := m.rt.LookupImage(ref.String(), &libimage.LookupImageOptions{
+		Architecture:   runtime.GOARCH,
+		OS:             runtime.GOOS,
+		Variant:        "",
+		PlatformPolicy: libimage.PlatformPolicyDefault,
+		ManifestList:   false,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to lookup image: %w", err)
+	}
+
+	return img, nil
 }
 
 // NewManagerFromStore returns a new Manager using the given store.
@@ -66,8 +108,8 @@ func NewManagerFromStore(store storage.Store, sysctx *types.SystemContext) (*Man
 	}
 
 	return &Manager{
-		store:   store,
-		runtime: rt,
+		store: store,
+		rt:    rt,
 	}, nil
 }
 
@@ -75,24 +117,6 @@ func NewManagerFromStore(store storage.Store, sysctx *types.SystemContext) (*Man
 // An error is returned if local repository is missing or corrupted.
 func (m *Manager) Repository(name reference.Named) (*Repository, error) {
 	return newRepositoryFromName(m, name)
-}
-
-// lookupImage returns the image associated to the given ref.
-// This function expect a fully qualified reference and will use default values
-// ("latest" for tag, "docker.io" for registry) if not.
-func (m *Manager) lookupImage(ref reference.LocalRepository) (*libimage.Image, error) {
-	img, _, err := m.runtime.LookupImage(ref.String(), &libimage.LookupImageOptions{
-		Architecture:   runtime.GOARCH,
-		OS:             runtime.GOOS,
-		Variant:        "",
-		PlatformPolicy: libimage.PlatformPolicyDefault,
-		ManifestList:   false,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to lookup image: %w", err)
-	}
-
-	return img, nil
 }
 
 // LocalRepositoryExist returns true if a local repository with the given name
@@ -104,7 +128,7 @@ func (m *Manager) LocalRepositoryExist(name reference.Named) bool {
 
 // Repositories returns the list of repositories
 func (m *Manager) Repositories() ([]*Repository, error) {
-	images, err := m.runtime.ListImages(context.Background(), nil, &libimage.ListImagesOptions{
+	images, err := m.rt.ListImages(context.Background(), nil, &libimage.ListImagesOptions{
 		Filters: []string{"reference=*:HEAD"},
 	})
 	if err != nil {
@@ -161,9 +185,9 @@ type PullOptions struct {
 }
 
 func (m *Manager) pullRef(ref reference.RemoteRepository, options *PullOptions) ([]*libimage.Image, error) {
-	return m.runtime.Pull(context.Background(), ref.String(), config.PullPolicyNewer, &libimage.PullOptions{
+	return m.rt.Pull(context.Background(), ref.String(), config.PullPolicyNewer, &libimage.PullOptions{
 		CopyOptions: libimage.CopyOptions{
-			SystemContext:                    m.runtime.SystemContext(),
+			SystemContext:                    m.rt.SystemContext(),
 			SourceLookupReferenceFunc:        nil,
 			DestinationLookupReferenceFunc:   nil,
 			CompressionFormat:                nil,
@@ -215,7 +239,7 @@ func (m *Manager) Fetch(remoteRef reference.RemoteRepository, options FetchOptio
 	}
 
 	// List images with same name as repository
-	images, err := m.runtime.ListImages(context.Background(), []string{}, &libimage.ListImagesOptions{
+	images, err := m.rt.ListImages(context.Background(), []string{}, &libimage.ListImagesOptions{
 		Filters: []string{"reference=" + remoteRef.Name() + ":*"},
 	})
 	if err != nil {
@@ -270,9 +294,9 @@ func (m *Manager) repoBuilder(ref reference.Named, reportWriter io.Writer) (*bui
 		Mount:                 false,
 		SignaturePolicyPath:   "",
 		ReportWriter:          reportWriter,
-		SystemContext:         m.runtime.SystemContext(),
+		SystemContext:         m.rt.SystemContext(),
 		DefaultMountsFilePath: "",
-		Isolation:             0,
+		Isolation:             define.IsolationDefault,
 		NamespaceOptions:      nil,
 		ConfigureNetwork:      0,
 		CNIPluginPath:         "",

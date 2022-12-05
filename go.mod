@@ -8,24 +8,25 @@ require (
 	github.com/containers/image/v5 v5.23.0
 	github.com/containers/storage v1.43.0
 	github.com/docker/go-units v0.5.0
+	github.com/hashicorp/go-multierror v1.1.1
 	github.com/sirupsen/logrus v1.9.0
 	github.com/spf13/cobra v1.6.1
 	github.com/spf13/pflag v1.0.5
-	github.com/stretchr/testify v1.8.0
+	github.com/stretchr/testify v1.8.1
 )
 
 require (
 	github.com/Azure/go-ansiterm v0.0.0-20210617225240-d185dfc1b5a1 // indirect
-	github.com/BurntSushi/toml v1.2.0 // indirect
+	github.com/BurntSushi/toml v1.2.1 // indirect
 	github.com/Microsoft/go-winio v0.5.2 // indirect
-	github.com/Microsoft/hcsshim v0.9.4 // indirect
+	github.com/Microsoft/hcsshim v0.9.5 // indirect
 	github.com/VividCortex/ewma v1.2.0 // indirect
 	github.com/acarl005/stripansi v0.0.0-20180116102854-5a71ef0e047d // indirect
 	github.com/blang/semver v3.5.1+incompatible // indirect
 	github.com/chzyer/readline v1.5.1 // indirect
 	github.com/containerd/cgroups v1.0.4 // indirect
 	github.com/containerd/containerd v1.6.8 // indirect
-	github.com/containerd/stargz-snapshotter/estargz v0.12.0 // indirect
+	github.com/containerd/stargz-snapshotter/estargz v0.12.1 // indirect
 	github.com/containernetworking/cni v1.1.2 // indirect
 	github.com/containernetworking/plugins v1.1.1 // indirect
 	github.com/containers/libtrust v0.0.0-20200511145503-9c3a6c22cd9a // indirect
@@ -48,12 +49,11 @@ require (
 	github.com/google/uuid v1.3.0 // indirect
 	github.com/gorilla/mux v1.8.0 // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
-	github.com/hashicorp/go-multierror v1.1.1 // indirect
 	github.com/imdario/mergo v0.3.13 // indirect
 	github.com/inconshreveable/mousetrap v1.0.1 // indirect
 	github.com/jinzhu/copier v0.3.5 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
-	github.com/klauspost/compress v1.15.11 // indirect
+	github.com/klauspost/compress v1.15.12 // indirect
 	github.com/klauspost/pgzip v1.2.6-0.20220930104621-17e8dac29df8 // indirect
 	github.com/letsencrypt/boulder v0.0.0-20220723181115-27de4befb95e // indirect
 	github.com/manifoldco/promptui v0.9.0 // indirect

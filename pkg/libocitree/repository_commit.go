@@ -2,6 +2,7 @@ package libocitree
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/url"
@@ -11,7 +12,15 @@ import (
 	"github.com/containers/buildah"
 	"github.com/containers/buildah/define"
 	"github.com/containers/storage/pkg/archive"
+	"github.com/negrel/ocitree/pkg/reference"
 	"github.com/sirupsen/logrus"
+)
+
+const CommitPrefix = "/bin/sh -c #(ocitree) "
+
+var (
+	ErrRebaseNothingToRebase    = errors.New("nothing to rebase")
+	ErrRebaseUnknownInstruction = errors.New("unknown instruction")
 )
 
 // CommitOptions contains options to add a commit to repository.
@@ -23,10 +32,10 @@ type CommitOptions struct {
 }
 
 func (r *Repository) commit(builder *buildah.Builder, options CommitOptions) error {
-	sref := r.store.storageReference(r.headRef)
+	sref := r.runtime.storageReference(r.headRef)
 
 	builder.SetHistoryComment(options.Message + "\n")
-	builder.SetCreatedBy("/bin/sh -c #(ocitree) " + options.CreatedBy)
+	builder.SetCreatedBy(CommitPrefix + options.CreatedBy)
 
 	_, _, _, err := builder.Commit(context.Background(), sref, buildah.CommitOptions{
 		PreferredManifestType: "",
@@ -35,7 +44,7 @@ func (r *Repository) commit(builder *buildah.Builder, options CommitOptions) err
 		AdditionalTags:        nil,
 		ReportWriter:          options.ReportWriter,
 		HistoryTimestamp:      nil,
-		SystemContext:         r.store.systemContext(),
+		SystemContext:         r.runtime.systemContext(),
 		IIDFile:               "",
 		Squash:                false,
 		OmitHistory:           false,
@@ -111,7 +120,7 @@ func (r *Repository) Add(dest string, options AddOptions, sources ...string) err
 		}
 	}
 
-	builder, err := r.store.repoBuilder(r.headRef, options.ReportWriter)
+	builder, err := r.runtime.repoBuilder(r.headRef, options.ReportWriter)
 	if err != nil {
 		return err
 	}
@@ -122,7 +131,7 @@ func (r *Repository) Add(dest string, options AddOptions, sources ...string) err
 		return fmt.Errorf("failed to add files to image: %w", err)
 	}
 
-	createdBy := fmt.Sprintf("ADD --chown=%q --chmod=%q %v %v",
+	createdBy := fmt.Sprintf("%v --chown=%q --chmod=%q %v %v", AddCommitOperation,
 		options.Chown, options.Chmod, stringList(sources), dest)
 
 	return r.commit(builder, CommitOptions{
@@ -164,7 +173,7 @@ type ExecOptions struct {
 }
 
 func (r *Repository) Exec(options ExecOptions, cmd string, args ...string) error {
-	builder, err := r.store.repoBuilder(r.headRef, nil)
+	builder, err := r.runtime.repoBuilder(r.headRef, nil)
 	if err != nil {
 		return err
 	}
@@ -174,32 +183,44 @@ func (r *Repository) Exec(options ExecOptions, cmd string, args ...string) error
 	command = append(command, cmd)
 	command = append(command, args...)
 	err = builder.Run(command, buildah.RunOptions{
-		Logger:              logrus.StandardLogger(),
-		Hostname:            "",
-		Isolation:           define.IsolationChroot,
-		Runtime:             "",
-		Args:                nil,
-		NoHosts:             false,
-		NoPivot:             false,
-		Mounts:              nil,
-		Env:                 nil,
-		User:                "",
-		WorkingDir:          "",
-		ContextDir:          "",
-		Shell:               "",
-		Cmd:                 nil,
-		Entrypoint:          nil,
-		NamespaceOptions:    nil,
-		ConfigureNetwork:    0,
-		CNIPluginPath:       "",
-		CNIConfigDir:        "",
-		Terminal:            0,
-		TerminalSize:        nil,
-		Stdin:               options.Stdin,
-		Stdout:              options.Stdout,
-		Stderr:              options.Stderr,
-		Quiet:               true,
-		AddCapabilities:     nil,
+		Logger:           logrus.StandardLogger(),
+		Hostname:         "",
+		Isolation:        define.IsolationChroot,
+		Runtime:          "",
+		Args:             nil,
+		NoHosts:          false,
+		NoPivot:          false,
+		Mounts:           nil,
+		Env:              nil,
+		User:             "root",
+		WorkingDir:       "",
+		ContextDir:       "",
+		Shell:            "",
+		Cmd:              []string{},
+		Entrypoint:       []string{},
+		NamespaceOptions: nil,
+		ConfigureNetwork: 0,
+		CNIPluginPath:    "",
+		CNIConfigDir:     "",
+		Terminal:         0,
+		TerminalSize:     nil,
+		Stdin:            options.Stdin,
+		Stdout:           options.Stdout,
+		Stderr:           options.Stderr,
+		Quiet:            true,
+		AddCapabilities: []string{
+			"CAP_CHOWN",
+			"CAP_DAC_OVERRIDE",
+			"CAP_FOWNER",
+			"CAP_FSETID",
+			"CAP_KILL",
+			"CAP_NET_BIND_SERVICE",
+			"CAP_SETFCAP",
+			"CAP_SETGID",
+			"CAP_SETPCAP",
+			"CAP_SETUID",
+			"CAP_SYS_CHROOT",
+		},
 		DropCapabilities:    nil,
 		Devices:             []define.BuildahDevice{},
 		Secrets:             nil,
@@ -207,7 +228,7 @@ func (r *Repository) Exec(options ExecOptions, cmd string, args ...string) error
 		RunMounts:           nil,
 		StageMountPoints:    nil,
 		ExternalImageMounts: nil,
-		SystemContext:       r.store.systemContext(),
+		SystemContext:       r.runtime.systemContext(),
 		CgroupManager:       "",
 	})
 	if err != nil {
@@ -215,8 +236,18 @@ func (r *Repository) Exec(options ExecOptions, cmd string, args ...string) error
 	}
 
 	return r.commit(builder, CommitOptions{
-		CreatedBy:    "EXEC " + stringList(command).String(),
+		CreatedBy:    ExecCommitOperation.String() + stringList(command).String(),
 		Message:      options.Message,
 		ReportWriter: options.ReportWriter,
 	})
+}
+
+// RebaseSession starts and returns a new RebaseSession with the given tag as base reference.
+func (r *Repository) RebaseSession(tagged reference.Tagged) (*RebaseSession, error) {
+	ref, err := reference.RemoteFromNamedTagged(r.headRef, tagged)
+	if err != nil {
+		return nil, err
+	}
+
+	return newRebaseSession(r.runtime, r, ref)
 }

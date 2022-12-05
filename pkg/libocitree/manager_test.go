@@ -41,7 +41,7 @@ func TestManagerClone(t *testing.T) {
 	remoteRef, err := reference.RemoteFromString(repoName)
 	require.NoError(t, err)
 
-	runtime := manager.runtime
+	runtime := manager.rt
 
 	t.Run("ImageMissing", func(t *testing.T) {
 		// Ensure repository doesn't exist
@@ -127,7 +127,7 @@ func TestManagerRepository(t *testing.T) {
 	manager, cleanup := newTestManager(t)
 	defer cleanup()
 
-	runtime := manager.runtime
+	runtime := manager.rt
 
 	repoName, err := reference.NameFromString("alpine")
 	require.NoError(t, err)
@@ -205,7 +205,7 @@ func TestManagerFetch(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	img, _, err := manager.runtime.LookupImage(reference.LocalFromRemote(ref).String(), nil)
+	img, _, err := manager.rt.LookupImage(reference.LocalFromRemote(ref).String(), nil)
 	require.NoError(t, err)
 
 	// Add a latest tag
@@ -224,17 +224,17 @@ func TestManagerFetch(t *testing.T) {
 
 	// We should have 3 images now, 3.15, 3.14 and latest
 	// let's test 3.15
-	img, _, err = manager.runtime.LookupImage(ref.String(), nil)
+	img, _, err = manager.rt.LookupImage(ref.String(), nil)
 	require.NoError(t, err)
 	require.Equal(t, []string{reference.LocalHeadFromNamed(ref).String(), ref.String()}, img.Names())
 
 	// latest now
-	img, _, err = manager.runtime.LookupImage(latestRef.String(), nil)
+	img, _, err = manager.rt.LookupImage(latestRef.String(), nil)
 	require.NoError(t, err)
 	require.Equal(t, []string{latestRef.String()}, img.Names())
 
 	// And 3.14
-	img, _, err = manager.runtime.LookupImage(ref2.String(), nil)
+	img, _, err = manager.rt.LookupImage(ref2.String(), nil)
 	require.NoError(t, err)
 	require.Equal(t, []string{ref2.String()}, img.Names())
 }

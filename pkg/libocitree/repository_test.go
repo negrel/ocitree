@@ -105,7 +105,7 @@ func TestRepositoryOtherTags(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, []string{"3.15"}, tags)
 
-	_, errs := manager.runtime.RemoveImages(context.Background(), []string{ref2.String()}, &libimage.RemoveImagesOptions{
+	_, errs := manager.rt.RemoveImages(context.Background(), []string{ref2.String()}, &libimage.RemoveImagesOptions{
 		Force:   true,
 		Ignore:  false,
 		NoPrune: true,
@@ -145,7 +145,7 @@ func TestRepositoryAddTag(t *testing.T) {
 
 	// Check image is tagged
 	localRef := reference.LocalFromNamedTagged(ref, tag)
-	img, _, err := manager.runtime.LookupImage(localRef.String(), nil)
+	img, _, err := manager.rt.LookupImage(localRef.String(), nil)
 	require.NoError(t, err)
 	require.NotNil(t, img)
 	require.Equal(t, repo.ID(), img.ID())
@@ -178,7 +178,7 @@ func TestRepositoryRemoveTag(t *testing.T) {
 	require.NoError(t, err)
 
 	// Check image can't be found anymore
-	_, _, err = manager.runtime.LookupImage(ref.String(), nil)
+	_, _, err = manager.rt.LookupImage(ref.String(), nil)
 	require.Error(t, err)
 
 	// Check repository object is up to date

@@ -1,10 +1,15 @@
 package libocitree
 
 import (
+	"errors"
 	"strings"
 	"time"
 
 	"github.com/containers/common/libimage"
+)
+
+var (
+	ErrUnknownCommitOperation = errors.New("unknown commit operation")
 )
 
 type CommitOperation uint
@@ -77,6 +82,10 @@ func (c *Commit) ID() string {
 
 // Comment returns the comment associated to this commit.
 func (c *Commit) Comment() string {
+	if splitted := strings.Split(c.history.Comment, "\nFROM"); len(splitted) != 1 {
+		return splitted[0]
+	}
+
 	return c.history.Comment
 }
 

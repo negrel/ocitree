@@ -16,22 +16,23 @@ var (
 	ErrRepositoryInvalidNoName = errors.New("invalid repository, no valid name")
 )
 
-type imageStore interface {
+type imageRuntime interface {
 	lookupImage(reference.LocalRepository) (*libimage.Image, error)
 	listImages(filters ...string) ([]*libimage.Image, error)
 	repoBuilder(reference.Named, io.Writer) (*buildah.Builder, error)
 	storageReference(reference.LocalRepository) types.ImageReference
 	systemContext() *types.SystemContext
+	diff(from, to *Commit) (io.ReadCloser, error)
 }
 
 // Repository is an object holding the history of a rootfs (OCI/Docker image).
 type Repository struct {
 	headRef reference.LocalRepository
-	store   imageStore
+	runtime imageRuntime
 	head    *libimage.Image
 }
 
-func newRepositoryFromImage(store imageStore, head *libimage.Image) (*Repository, error) {
+func newRepositoryFromImage(store imageRuntime, head *libimage.Image) (*Repository, error) {
 	names, err := head.NamedTaggedRepoTags()
 	if err != nil {
 		return nil, fmt.Errorf("failed to retrieve image references of repository: %w", err)
@@ -49,12 +50,12 @@ func newRepositoryFromImage(store imageStore, head *libimage.Image) (*Repository
 
 	return &Repository{
 		headRef: headRef,
-		store:   store,
+		runtime: store,
 		head:    head,
 	}, nil
 }
 
-func newRepositoryFromName(store imageStore, name reference.Named) (*Repository, error) {
+func newRepositoryFromName(store imageRuntime, name reference.Named) (*Repository, error) {
 	ref := reference.LocalHeadFromNamed(name)
 
 	head, err := store.lookupImage(ref)
@@ -63,7 +64,7 @@ func newRepositoryFromName(store imageStore, name reference.Named) (*Repository,
 	}
 
 	return &Repository{
-		store:   store,
+		runtime: store,
 		head:    head,
 		headRef: ref,
 	}, nil
@@ -106,7 +107,7 @@ func (r *Repository) HeadTags() []string {
 // OtherTags returns tags associated to this repository without tags associated to
 // HEAD.
 func (r *Repository) OtherTags() ([]string, error) {
-	images, err := r.store.listImages("reference=" + r.Name() + ":*")
+	images, err := r.runtime.listImages("reference=" + r.Name() + ":*")
 	if err != nil {
 		return nil, fmt.Errorf("failed to list repository reference: %w", err)
 	}
@@ -152,19 +153,21 @@ func (r *Repository) RemoveTag(tag reference.Tagged) error {
 	return r.head.Untag(ref.String())
 }
 
+// removeLocalTag removes the given tag even if it's a local one (e.g. REBASE_HEAD)
+func (r *Repository) removeLocalTag(tag reference.Tagged) error {
+	ref := reference.LocalFromNamedTagged(r.HeadRef(), tag)
+
+	return r.head.Untag(ref.String())
+}
+
 // Commits returns the commits history of this repository.
-func (r *Repository) Commits() ([]Commit, error) {
+func (r *Repository) Commits() (Commits, error) {
 	history, err := r.head.History(context.Background())
 	if err != nil {
 		return nil, fmt.Errorf("failed to retrieve history from image: %w", err)
 	}
 
-	commits := make([]Commit, len(history))
-	for i, h := range history {
-		commits[i] = newCommit(h)
-	}
-
-	return commits, nil
+	return newCommits(history), nil
 }
 
 // Mount mounts the repository and returns the mountpoint.
@@ -189,7 +192,7 @@ func findRepoName(names []reference.NamedTagged) string {
 
 // ReloadHead reloads underlying HEAD image.
 func (r *Repository) ReloadHead() error {
-	img, err := r.store.lookupImage(r.headRef)
+	img, err := r.runtime.lookupImage(r.headRef)
 	if err != nil {
 		return err
 	}
@@ -208,7 +211,7 @@ func (r *Repository) Checkout(tag reference.Tagged) error {
 	}
 
 	// Get reference
-	img, err := r.store.lookupImage(ref)
+	img, err := r.runtime.lookupImage(ref)
 	if err != nil {
 		return fmt.Errorf("local reference not found: %v", err)
 	}

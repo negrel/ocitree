@@ -35,7 +35,7 @@ func TestRepositoryAdd(t *testing.T) {
 	require.NoError(t, err)
 
 	t.Run("Valid", func(t *testing.T) {
-		history := getImageHistory(t, manager.runtime, headRef.String())
+		history := getImageHistory(t, manager.rt, headRef.String())
 		historySize := len(history)
 
 		// Add directory
@@ -49,7 +49,7 @@ func TestRepositoryAdd(t *testing.T) {
 		require.NoError(t, err, "failed to add files")
 
 		// Let's check image history now
-		history = getImageHistory(t, manager.runtime, headRef.String())
+		history = getImageHistory(t, manager.rt, headRef.String())
 
 		// Ensure commit was added to history
 		require.Equal(t, historySize+1, len(history), "add commit is missing")
@@ -70,7 +70,7 @@ func TestRepositoryAdd(t *testing.T) {
 	})
 
 	t.Run("Failed", func(t *testing.T) {
-		history := getImageHistory(t, manager.runtime, headRef.String())
+		history := getImageHistory(t, manager.rt, headRef.String())
 
 		// Add directory
 		commitMsg := randomCommitMessage()
@@ -83,7 +83,7 @@ func TestRepositoryAdd(t *testing.T) {
 		require.Error(t, err, "add should fail")
 
 		// Let's check image history now
-		history2 := getImageHistory(t, manager.runtime, headRef.String())
+		history2 := getImageHistory(t, manager.rt, headRef.String())
 
 		// Ensure no commit was added to history
 		require.Equal(t, history, history2, "history was modified but add failed")
@@ -111,7 +111,7 @@ func TestRepositoryExec(t *testing.T) {
 	repo, err := manager.Repository(ref)
 	require.NoError(t, err)
 
-	history := getImageHistory(t, manager.runtime, headRef.String())
+	history := getImageHistory(t, manager.rt, headRef.String())
 	historySize := len(history)
 
 	// Setup stdin and stdout.
@@ -144,7 +144,7 @@ func TestRepositoryExec(t *testing.T) {
 	require.Equal(t, expectedStderr, stderr.String(), "stderr doesn't contains expected string")
 
 	// Let's check image history now
-	history = getImageHistory(t, manager.runtime, headRef.String())
+	history = getImageHistory(t, manager.rt, headRef.String())
 
 	// Ensure commit was added to history
 	require.Equal(t, historySize+1, len(history), "add commit is missing")

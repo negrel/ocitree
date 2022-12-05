@@ -28,8 +28,12 @@ ocitree --help
 
 ## TODO
 
-- [ ] Commit changes
 - [ ] Rebase user changes
+	- [x] pick rebase choice
+	- [ ] exec rebase choice
+	- [ ] drop rebase choice
+	- [ ] reword rebase choice
+	- [ ] squash rebase choice
 
 ## Contributing
 
