@@ -45,7 +45,7 @@ func TestRemoteReference(t *testing.T) {
 		{
 			name:          "FullyQualified/WithHEADTag/Invalid",
 			reference:     "docker.io/library/archlinux:HEAD",
-			expectedError: ErrRemoteRepoReferenceContainsHeadTag,
+			expectedError: ErrRemoteRepoReferenceContainsReservedTag,
 		},
 		{
 			name:          "FullyQualified/WithEmptyTag/Invalid",

@@ -7,7 +7,7 @@ import (
 )
 
 var (
-	ErrRemoteRepoReferenceContainsHeadTag = errors.New("remote repository reference contains a HEAD tag")
+	ErrRemoteRepoReferenceContainsReservedTag = errors.New("remote repository reference contains a reserved tag")
 )
 
 var (
@@ -31,8 +31,10 @@ func RemoteFromString(remoteRef string) (RemoteRepository, error) {
 	}
 
 	namedTagged, isTagged := ref.(NamedTagged)
-	if isTagged && namedTagged.Tag() == "HEAD" {
-		return RemoteRepository{}, ErrRemoteRepoReferenceContainsHeadTag
+	if isTagged {
+		if namedTagged.Tag() == Head || namedTagged.Tag() == RebaseHead {
+			return RemoteRepository{}, ErrRemoteRepoReferenceContainsReservedTag
+		}
 	}
 
 	if !isTagged {
@@ -53,7 +55,7 @@ func RemoteLatestFromNamed(named Named) RemoteRepository {
 // tag and name. An error is returned if tagged is HEAD.
 func RemoteFromNamedTagged(named Named, tagged Tagged) (RemoteRepository, error) {
 	if tagged.Tag() == Head {
-		return RemoteRepository{}, ErrRemoteRepoReferenceContainsHeadTag
+		return RemoteRepository{}, ErrRemoteRepoReferenceContainsReservedTag
 	}
 
 	return RemoteFromString(named.Name() + ":" + tagged.Tag())

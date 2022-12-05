@@ -3,8 +3,9 @@ package reference
 import "github.com/containers/image/v5/docker/reference"
 
 var (
-	HeadTag   = Tag{tag: Head}
-	LatestTag = Tag{tag: Latest}
+	HeadTag       = Tag{tag: Head}
+	RebaseHeadTag = Tag{tag: RebaseHead}
+	LatestTag     = Tag{tag: Latest}
 )
 
 var _ reference.Tagged = Tag{}

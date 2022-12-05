@@ -3,7 +3,8 @@ package reference
 import "github.com/containers/image/v5/docker/reference"
 
 const (
-	Head = "HEAD"
+	Head       = "HEAD"
+	RebaseHead = "REBASE_HEAD"
 )
 
 var _ NamedTagged = LocalRepository{}
@@ -40,6 +41,13 @@ func LocalFromRemote(remoteRef RemoteRepository) LocalRepository {
 // name of the given named.
 func LocalHeadFromNamed(ref Named) LocalRepository {
 	l, _ := LocalFromString(ref.Name() + ":" + Head)
+	return l
+}
+
+// LocalRebaseHeadFromNamed returns a new LocalRepository with "REBASE_HEAD" tag and
+// name of the given named.
+func LocalRebaseFromNamed(ref Named) LocalRepository {
+	l, _ := LocalFromString(ref.Name() + ":" + RebaseHead)
 	return l
 }
 
