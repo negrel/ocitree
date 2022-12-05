@@ -58,7 +58,7 @@ var execCmd = &cobra.Command{
 			Stdin:        nil,
 			Stdout:       os.Stdout,
 			Stderr:       os.Stderr,
-			Message:      message + "\n",
+			Message:      message,
 			ReportWriter: os.Stderr,
 		}, exec[0], exec[1:]...)
 		if err != nil {

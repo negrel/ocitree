@@ -236,7 +236,7 @@ func (r *Repository) Exec(options ExecOptions, cmd string, args ...string) error
 	}
 
 	return r.commit(builder, CommitOptions{
-		CreatedBy:    ExecCommitOperation.String() + stringList(command).String(),
+		CreatedBy:    ExecCommitOperation.String() + " " + stringList(command).String(),
 		Message:      options.Message,
 		ReportWriter: options.ReportWriter,
 	})

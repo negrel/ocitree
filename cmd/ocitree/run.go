@@ -59,7 +59,7 @@ var runCmd = &cobra.Command{
 			Stdin:        nil,
 			Stdout:       os.Stdout,
 			Stderr:       os.Stderr,
-			Message:      message + "\n",
+			Message:      message,
 			ReportWriter: os.Stderr,
 		}, "/bin/sh", "-c", strings.Join(exec, " "))
 		if err != nil {
