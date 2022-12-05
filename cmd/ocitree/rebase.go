@@ -15,6 +15,7 @@ func init() {
 	flagset := rebaseCmd.PersistentFlags()
 	setupStoreOptionsFlags(flagset)
 	setupCommitOptionsFlags(flagset)
+	flagset.BoolP("interactive", "i", false, "List commit to be rebase and let user edit that list before rebasing.")
 }
 
 var rebaseCmd = &cobra.Command{
@@ -32,38 +33,50 @@ var rebaseCmd = &cobra.Command{
 			return err
 		}
 
-		store, err := containersStore()
-		if err != nil {
-			logrus.Errorf("failed to create containers store: %v", err)
-			os.Exit(1)
-		}
-
-		manager, err := libocitree.NewManagerFromStore(store, nil)
-		if err != nil {
-			logrus.Errorf("failed to create repository manager: %v", err)
-			os.Exit(1)
-		}
-
-		repo, err := manager.Repository(rebaseRef)
-		if err != nil {
-			logrus.Errorf("repository not found: %v", err)
-			os.Exit(1)
-		}
-
-		session, err := repo.RebaseSession(rebaseRef)
-		if err != nil {
-			logrus.Errorf("failed to rebase to reference %q: %v", rebaseRef, err)
-			os.Exit(1)
-		}
-
-		err = session.Apply()
-		if err != nil {
-			session.Delete()
-			logrus.Errorf("failed to apply rebase: %v", err)
-			os.Exit(1)
-		}
-		session.Delete()
-
+		os.Exit(rebase(cmd, args, rebaseRef))
 		return nil
 	},
+}
+
+func rebase(cmd *cobra.Command, args []string, rebaseRef reference.RemoteRepository) int {
+	store, err := containersStore()
+	if err != nil {
+		logrus.Errorf("failed to create containers store: %v", err)
+		return 1
+	}
+
+	manager, err := libocitree.NewManagerFromStore(store, nil)
+	if err != nil {
+		logrus.Errorf("failed to create repository manager: %v", err)
+		return 1
+	}
+
+	repo, err := manager.Repository(rebaseRef)
+	if err != nil {
+		logrus.Errorf("repository not found: %v", err)
+		return 1
+	}
+
+	session, err := repo.RebaseSession(rebaseRef)
+	if err != nil {
+		logrus.Errorf("failed to rebase to reference %q: %v", rebaseRef, err)
+		return 1
+	}
+
+	// Interactive session
+	if isInteractive, _ := cmd.Flags().GetBool("interactive"); isInteractive {
+		err = session.InteractiveEdit()
+		if err != nil {
+			logrus.Errorf("%v", err)
+			return 1
+		}
+	}
+
+	err = session.Apply()
+	if err != nil {
+		logrus.Errorf("failed to apply rebase: %v", err)
+		return 1
+	}
+
+	return 0
 }

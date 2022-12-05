@@ -11,6 +11,7 @@ import (
 
 	"github.com/containers/buildah"
 	"github.com/containers/buildah/define"
+	"github.com/containers/image/v5/types"
 	"github.com/containers/storage/pkg/archive"
 	"github.com/negrel/ocitree/pkg/reference"
 	"github.com/sirupsen/logrus"
@@ -33,35 +34,11 @@ type CommitOptions struct {
 
 func (r *Repository) commit(builder *buildah.Builder, options CommitOptions) error {
 	sref := r.runtime.storageReference(r.headRef)
-
-	builder.SetHistoryComment(options.Message + "\n")
-	builder.SetCreatedBy(CommitPrefix + options.CreatedBy)
-
-	_, _, _, err := builder.Commit(context.Background(), sref, buildah.CommitOptions{
-		PreferredManifestType: "",
-		Compression:           archive.Gzip,
-		SignaturePolicyPath:   "",
-		AdditionalTags:        nil,
-		ReportWriter:          options.ReportWriter,
-		HistoryTimestamp:      nil,
-		SystemContext:         r.runtime.systemContext(),
-		IIDFile:               "",
-		Squash:                false,
-		OmitHistory:           false,
-		BlobDirectory:         "",
-		EmptyLayer:            false,
-		OmitTimestamp:         false,
-		SignBy:                "",
-		Manifest:              "",
-		MaxRetries:            0,
-		RetryDelay:            0,
-		OciEncryptConfig:      nil,
-		OciEncryptLayers:      nil,
-		UnsetEnvs:             nil,
-	})
+	err := commit(builder, options, sref, r.runtime.systemContext())
 	if err != nil {
-		return fmt.Errorf("failed to commit changes: %w", err)
+		return err
 	}
+
 	err = r.ReloadHead()
 	if err != nil {
 		return fmt.Errorf("failed to reload repository's HEAD after commit: %w", err)
@@ -250,4 +227,37 @@ func (r *Repository) RebaseSession(tagged reference.Tagged) (*RebaseSession, err
 	}
 
 	return newRebaseSession(r.runtime, r, ref)
+}
+
+func commit(builder *buildah.Builder, options CommitOptions, sref types.ImageReference, systemContext *types.SystemContext) error {
+	builder.SetHistoryComment(options.Message + "\n")
+	builder.SetCreatedBy(CommitPrefix + options.CreatedBy)
+
+	_, _, _, err := builder.Commit(context.Background(), sref, buildah.CommitOptions{
+		PreferredManifestType: "",
+		Compression:           archive.Gzip,
+		SignaturePolicyPath:   "",
+		AdditionalTags:        nil,
+		ReportWriter:          options.ReportWriter,
+		HistoryTimestamp:      nil,
+		SystemContext:         systemContext,
+		IIDFile:               "",
+		Squash:                false,
+		OmitHistory:           false,
+		BlobDirectory:         "",
+		EmptyLayer:            false,
+		OmitTimestamp:         false,
+		SignBy:                "",
+		Manifest:              "",
+		MaxRetries:            0,
+		RetryDelay:            0,
+		OciEncryptConfig:      nil,
+		OciEncryptLayers:      nil,
+		UnsetEnvs:             nil,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to commit changes: %w", err)
+	}
+
+	return nil
 }

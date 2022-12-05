@@ -31,7 +31,7 @@ ocitree --help
 - [ ] Rebase user changes
 	- [x] pick rebase choice
 	- [ ] exec rebase choice
-	- [ ] drop rebase choice
+	- [x] drop rebase choice
 	- [ ] reword rebase choice
 	- [ ] squash rebase choice
 

@@ -161,6 +161,7 @@ func (r *Repository) removeLocalTag(tag reference.Tagged) error {
 }
 
 // Commits returns the commits history of this repository.
+// Commits are ordered from newer to older commits.
 func (r *Repository) Commits() (Commits, error) {
 	history, err := r.head.History(context.Background())
 	if err != nil {
