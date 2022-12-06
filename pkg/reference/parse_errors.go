@@ -13,6 +13,7 @@ const (
 	remoteRepositoryParseErrorType
 	repositoryNameParseErrorType
 	repositoryTagParseErrorType
+	identifierParseErrorType
 )
 
 func (rk parseErrorType) String() string {
@@ -25,6 +26,9 @@ func (rk parseErrorType) String() string {
 		return "name"
 	case repositoryTagParseErrorType:
 		return "tag"
+	case identifierParseErrorType:
+		return "identifier"
+
 	default:
 		panic("unknown reference kind")
 	}
