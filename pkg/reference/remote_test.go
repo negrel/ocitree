@@ -105,7 +105,7 @@ func TestRemoteReference(t *testing.T) {
 			}
 			require.NoError(t, err)
 			require.Equal(t, test.expectedName, ref.Name())
-			require.Equal(t, test.expectedReference, ref.String())
+			require.Equal(t, test.expectedReference, ref.AbsoluteReference())
 		})
 	}
 }

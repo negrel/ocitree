@@ -15,6 +15,7 @@ var (
 )
 
 var _ NamedTagged = RemoteRepository{}
+var _ Reference = RemoteRepository{}
 
 // RemoteRepository is a wrapper around docker reference ensuring
 // the reference doesn't contain a HEAD tag or a relative reference.
@@ -74,4 +75,9 @@ func (rr RemoteRepository) String() string {
 // Tag implements NamedTagged
 func (rr RemoteRepository) Tag() string {
 	return rr.named.Tag()
+}
+
+// AbsoluteReference implements Reference
+func (rr RemoteRepository) AbsoluteReference() string {
+	return rr.String()
 }

@@ -8,6 +8,7 @@ const (
 )
 
 var _ NamedTagged = LocalRepository{}
+var _ Reference = LocalRepository{}
 
 // LocalRepository define an absolute reference to a local repository.
 // Any named docker reference is a valid local repository reference.
@@ -71,4 +72,9 @@ func (lr LocalRepository) Name() string {
 // Tag implements NamedTagged
 func (lr LocalRepository) Tag() string {
 	return lr.named.Tag()
+}
+
+// AbsoluteReference implements Reference
+func (lr LocalRepository) AbsoluteReference() string {
+	return lr.String()
 }

@@ -1,12 +1,18 @@
 package reference
 
-import "github.com/containers/image/v5/docker/reference"
+import dockerref "github.com/containers/image/v5/docker/reference"
 
 // Named is an object with a full name.
-type Named = reference.Named
+type Named = dockerref.Named
 
 // NamedTagged is an object including a name and tag.
-type NamedTagged = reference.NamedTagged
+type NamedTagged = dockerref.NamedTagged
 
 // Tagged is an object which has a tag.
-type Tagged = reference.Tagged
+type Tagged = dockerref.Tagged
+
+// Reference is an opaque object reference identifier that may include modifiers
+// such as a local, remote and relative reference.
+type Reference interface {
+	AbsoluteReference() string
+}
