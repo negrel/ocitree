@@ -1,4 +1,4 @@
-package reference
+package components
 
 import (
 	"testing"
@@ -18,7 +18,7 @@ func TestName(t *testing.T) {
 			name:          "EmptyName",
 			refName:       "",
 			expectedName:  "",
-			expectedError: wrapParseError(repositoryNameParseErrorType, reference.ErrReferenceInvalidFormat),
+			expectedError: wrapParseError(nameParseErrorType, reference.ErrReferenceInvalidFormat),
 		},
 		{
 			name:         "Minimal/Valid",
@@ -43,7 +43,7 @@ func TestName(t *testing.T) {
 		{
 			name:          "InvalidName",
 			refName:       "§archlinux",
-			expectedError: wrapParseError(repositoryNameParseErrorType, reference.ErrReferenceInvalidFormat),
+			expectedError: wrapParseError(nameParseErrorType, reference.ErrReferenceInvalidFormat),
 		},
 	} {
 		t.Run(test.name, func(t *testing.T) {

@@ -22,8 +22,10 @@ import (
 )
 
 var (
-	ErrLocalRepositoryAlreadyExist = errors.New("local repository with the same name already exist")
-	ErrLocalRepositoryUnknown      = errors.New("unknown local repository")
+	ErrLocalRepositoryAlreadyExist        = errors.New("local repository with the same name already exist")
+	ErrLocalRepositoryUnknown             = errors.New("unknown local repository")
+	ErrRelativeReferenceOffsetOutOfBounds = errors.New("relative reference offset is out of bounds")
+	ErrCommitHasNoImageAssociated         = errors.New("commit has no image associated")
 )
 
 // Manager defines a repositories manager.
@@ -38,8 +40,17 @@ func (m *Manager) systemContext() *types.SystemContext {
 }
 
 // storageReference implements imageStore
-func (m *Manager) storageReference(ref reference.LocalRepository) types.ImageReference {
-	r, err := storageTransport.Transport.NewStoreReference(m.store, ref, "")
+func (m *Manager) storageReference(ref reference.Reference) types.ImageReference {
+	var named reference.Named
+	var id string
+	// Local and remote reference
+	if namedTagged, isNamedTagged := ref.(reference.NamedTagged); isNamedTagged {
+		named = namedTagged
+	} else { // identifier
+		id = ref.AbsoluteReference()
+	}
+
+	r, err := storageTransport.Transport.NewStoreReference(m.store, named, id)
 	if err != nil {
 		panic(err)
 	}
@@ -79,8 +90,8 @@ func (m *Manager) diff(from, to *Commit) (io.ReadCloser, error) {
 // lookupImage returns the image associated to the given ref.
 // This function expect a fully qualified reference and will use default values
 // ("latest" for tag, "docker.io" for registry) if not.
-func (m *Manager) lookupImage(ref reference.LocalRepository) (*libimage.Image, error) {
-	img, _, err := m.rt.LookupImage(ref.String(), &libimage.LookupImageOptions{
+func (m *Manager) lookupImage(ref reference.Reference) (*libimage.Image, error) {
+	img, _, err := m.rt.LookupImage(ref.AbsoluteReference(), &libimage.LookupImageOptions{
 		Architecture:   runtime.GOARCH,
 		OS:             runtime.GOOS,
 		Variant:        "",
@@ -124,6 +135,34 @@ func (m *Manager) Repository(name reference.Named) (*Repository, error) {
 func (m *Manager) LocalRepositoryExist(name reference.Named) bool {
 	img, err := m.lookupImage(reference.LocalHeadFromNamed(name))
 	return img != nil && err == nil
+}
+
+// ResolveRelativeReference turns a relative reference into an absolute one.
+func (m *Manager) ResolveRelativeReference(ref reference.Relative) (reference.Reference, error) {
+	img, err := m.lookupImage(ref.Base())
+	if err != nil {
+		return nil, fmt.Errorf("failed to lookup base reference: %w", err)
+	}
+
+	history, err := img.History(context.Background())
+	if err != nil {
+		return nil, fmt.Errorf("failed to retrieve history of base reference: %w", err)
+	}
+	if len(history) <= int(ref.Offset()) {
+		return nil, ErrRelativeReferenceOffsetOutOfBounds
+	}
+
+	commit := history[ref.Offset()]
+	if commit.ID == "" || commit.ID == "<missing>" {
+		return nil, ErrCommitHasNoImageAssociated
+	}
+
+	absRef, err := reference.IdentifierFromString(commit.ID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse commit ID: %w", err)
+	}
+
+	return absRef, nil
 }
 
 // Repositories returns the list of repositories

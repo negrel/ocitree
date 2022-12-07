@@ -3,78 +3,76 @@ package reference
 import (
 	"errors"
 
-	"github.com/containers/image/v5/docker/reference"
+	"github.com/negrel/ocitree/pkg/reference/components"
 )
 
 var (
 	ErrRemoteRepoReferenceContainsReservedTag = errors.New("remote repository reference contains a reserved tag")
+
+	reservedTags map[string]struct{} = map[string]struct{}{
+		components.Head:       {},
+		components.RebaseHead: {},
+	}
 )
 
-var (
-	Latest = "latest"
-)
-
-var _ NamedTagged = RemoteRepository{}
 var _ Reference = RemoteRepository{}
+var _ Named = RemoteRepository{}
 
 // RemoteRepository is a wrapper around docker reference ensuring
 // the reference doesn't contain a HEAD tag or a relative reference.
 type RemoteRepository struct {
-	named NamedTagged
+	innerRef
 }
 
 // RemoteFromString returns a RemoteRepository reference from the given string
 // after validating and normalizing it. An error is returned if the reference is invalid.
 func RemoteFromString(remoteRef string) (RemoteRepository, error) {
-	ref, err := reference.ParseNormalizedNamed(remoteRef)
+	name, tag, id, err := splitComponents(remoteRef)
 	if err != nil {
-		return RemoteRepository{}, wrapParseError(remoteRepositoryParseErrorType, err)
+		return RemoteRepository{}, err
+	}
+	if name == "" {
+		return RemoteRepository{}, ErrReferenceMissingName
+	}
+	if tag == "" && id == "" {
+		tag = components.Latest
+	}
+	ref, err := newInnerRef(name, tag, id)
+	if err != nil {
+		return RemoteRepository{}, err
+	}
+	if _, isReserved := reservedTags[tag]; isReserved {
+		return RemoteRepository{}, ErrRemoteRepoReferenceContainsReservedTag
 	}
 
-	namedTagged, isTagged := ref.(NamedTagged)
-	if isTagged {
-		if namedTagged.Tag() == Head || namedTagged.Tag() == RebaseHead {
-			return RemoteRepository{}, ErrRemoteRepoReferenceContainsReservedTag
-		}
-	}
-
-	if !isTagged {
-		namedTagged, _ = reference.WithTag(ref, Latest)
-	}
-
-	return RemoteRepository{named: namedTagged}, nil
+	return RemoteRepository{innerRef: ref}, nil
 }
 
 // RemoteLatestFromNamed returns a new RemoteReference with a "latest" tag and
 // name from the given Named.
 func RemoteLatestFromNamed(named Named) RemoteRepository {
-	r, _ := RemoteFromString(named.Name() + ":" + Latest)
+	r, _ := RemoteFromString(named.Name() + ":" + components.Latest)
 	return r
 }
 
 // RemoteFromNamedTagged returns a new RemoteReference with the given
 // tag and name. An error is returned if tagged is HEAD.
 func RemoteFromNamedTagged(named Named, tagged Tagged) (RemoteRepository, error) {
-	if tagged.Tag() == Head {
+	if tagged.Tag() == components.Head {
 		return RemoteRepository{}, ErrRemoteRepoReferenceContainsReservedTag
 	}
 
 	return RemoteFromString(named.Name() + ":" + tagged.Tag())
 }
 
-// Name implements Named
+// Name implements Named.
 func (rr RemoteRepository) Name() string {
-	return rr.named.Name()
+	return rr.innerRef.name.Name()
 }
 
 // String implements reference.Reference
 func (rr RemoteRepository) String() string {
-	return rr.named.String()
-}
-
-// Tag implements NamedTagged
-func (rr RemoteRepository) Tag() string {
-	return rr.named.Tag()
+	return rr.innerRef.AbsoluteReference()
 }
 
 // AbsoluteReference implements Reference

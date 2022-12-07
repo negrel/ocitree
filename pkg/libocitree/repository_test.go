@@ -26,7 +26,8 @@ func TestRepositoryHeadTags(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	repo, err := manager.Repository(reference.NameFromNamed(ref))
+	repo, err := manager.Repository(ref)
+	require.NoError(t, err)
 
 	tags := repo.HeadTags()
 	require.Equal(t, []string{"latest"}, tags)
@@ -224,4 +225,8 @@ func TestRepositoryCheckout(t *testing.T) {
 	// Check HEAD reference 3.15 now
 	tags = repo.HeadTags()
 	require.Equal(t, []string{"3.15"}, tags)
+}
+
+func TestRepositoryCheckoutRelative(t *testing.T) {
+
 }

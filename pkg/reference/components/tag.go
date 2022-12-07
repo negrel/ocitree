@@ -1,6 +1,12 @@
-package reference
+package components
 
 import "github.com/containers/image/v5/docker/reference"
+
+const (
+	Head       = "HEAD"
+	RebaseHead = "REBASE_HEAD"
+	Latest     = "latest"
+)
 
 var (
 	HeadTag       = Tag{tag: Head}
@@ -8,7 +14,7 @@ var (
 	LatestTag     = Tag{tag: Latest}
 )
 
-var _ reference.Tagged = Tag{}
+var _ Tagged = Tag{}
 
 // Tag define the tag component of a repository reference.
 type Tag struct {
@@ -21,7 +27,7 @@ var archlinuxName = Name{"docker.io/library/archlinux"}
 func TagFromString(tag string) (Tag, error) {
 	ref, err := reference.WithTag(archlinuxName, tag)
 	if err != nil {
-		return Tag{}, wrapParseError(repositoryTagParseErrorType, err)
+		return Tag{}, wrapParseError(tagParseErrorType, err)
 	}
 
 	return Tag{

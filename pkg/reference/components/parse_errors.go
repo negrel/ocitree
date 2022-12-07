@@ -1,4 +1,4 @@
-package reference
+package components
 
 import (
 	"fmt"
@@ -9,24 +9,18 @@ var _ error = ParseError{}
 type parseErrorType uint
 
 const (
-	localRepositoryParseErrorType parseErrorType = iota
-	remoteRepositoryParseErrorType
-	repositoryNameParseErrorType
-	repositoryTagParseErrorType
-	identifierParseErrorType
+	nameParseErrorType parseErrorType = iota
+	tagParseErrorType
+	idParseErrorType
 )
 
 func (rk parseErrorType) String() string {
 	switch rk {
-	case localRepositoryParseErrorType:
-		return "local reference"
-	case remoteRepositoryParseErrorType:
-		return "remote reference"
-	case repositoryNameParseErrorType:
+	case nameParseErrorType:
 		return "name"
-	case repositoryTagParseErrorType:
+	case tagParseErrorType:
 		return "tag"
-	case identifierParseErrorType:
+	case idParseErrorType:
 		return "identifier"
 
 	default:

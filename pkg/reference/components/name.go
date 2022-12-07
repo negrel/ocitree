@@ -1,4 +1,4 @@
-package reference
+package components
 
 import (
 	"errors"
@@ -24,19 +24,14 @@ type Name struct {
 func NameFromString(name string) (Name, error) {
 	ref, err := reference.ParseNormalizedNamed(name)
 	if err != nil {
-		return Name{}, wrapParseError(repositoryNameParseErrorType, err)
+		return Name{}, wrapParseError(nameParseErrorType, err)
 	}
 
-	named, isNamed := ref.(Named)
-	if !isNamed {
-		return Name{}, ErrNameInvalidFormat
-	}
-
-	if !reference.IsNameOnly(named) {
+	if !reference.IsNameOnly(ref) {
 		return Name{}, ErrNameContainsTagOrDigest
 	}
 
-	return Name{name: named.Name()}, nil
+	return Name{name: ref.Name()}, nil
 }
 
 func NameFromNamed(ref Named) Name {

@@ -13,15 +13,17 @@ import (
 )
 
 var (
-	ErrRepositoryInvalidNoName = errors.New("invalid repository, no valid name")
+	ErrRepositoryInvalidNoName  = errors.New("invalid repository, no valid name")
+	ErrImageNotPartOfRepository = errors.New("image is not part of repository")
 )
 
 type imageRuntime interface {
-	lookupImage(reference.LocalRepository) (*libimage.Image, error)
+	lookupImage(reference.Reference) (*libimage.Image, error)
 	listImages(filters ...string) ([]*libimage.Image, error)
 	repoBuilder(reference.Named, io.Writer) (*buildah.Builder, error)
-	storageReference(reference.LocalRepository) types.ImageReference
+	storageReference(reference.Reference) types.ImageReference
 	systemContext() *types.SystemContext
+	ResolveRelativeReference(reference.Relative) (reference.Reference, error)
 	diff(from, to *Commit) (io.ReadCloser, error)
 }
 
@@ -134,7 +136,7 @@ func (r *Repository) OtherTags() ([]string, error) {
 }
 
 // AddTag adds the given tag to HEAD.
-func (r *Repository) AddTag(tag reference.Tagged) error {
+func (r *Repository) AddTag(tag reference.Tag) error {
 	ref, err := reference.RemoteFromString(r.Name() + ":" + tag.Tag())
 	if err != nil {
 		return err
@@ -144,7 +146,7 @@ func (r *Repository) AddTag(tag reference.Tagged) error {
 }
 
 // RemoveTag returns the given tag from HEAD.
-func (r *Repository) RemoveTag(tag reference.Tagged) error {
+func (r *Repository) RemoveTag(tag reference.Tag) error {
 	ref, err := reference.RemoteFromString(r.Name() + ":" + tag.Tag())
 	if err != nil {
 		return err
@@ -203,14 +205,31 @@ func (r *Repository) ReloadHead() error {
 	return nil
 }
 
-// Checkout moves repository's HEAD to the given reference tag.
-func (r *Repository) Checkout(tag reference.Tagged) error {
-	ref, err := reference.LocalFromString(r.Name() + ":" + tag.Tag())
-	// Should never occur as tag and reposity name are valid
+// Checkout to commit with the given Identifier.
+func (r *Repository) Checkout(id reference.Reference) error {
+	img, err := r.runtime.lookupImage(id)
 	if err != nil {
-		panic(err)
+		return fmt.Errorf("failed to lookup checkout reference: %w", err)
 	}
 
+	names, err := img.NamedRepoTags()
+	if err != nil {
+		return fmt.Errorf("failed to retrieve checkout image names: %w", err)
+	}
+
+	// Ensure image names is same as repository name.
+	for _, named := range names {
+		if named.Name() == r.Name() {
+			return r.checkout(id)
+		}
+	}
+
+	return ErrImageNotPartOfRepository
+}
+
+// checkout contains shared code between checkout methods.
+// This method shouldn't be called directly, use public methods instead.
+func (r *Repository) checkout(ref reference.Reference) error {
 	// Get reference
 	img, err := r.runtime.lookupImage(ref)
 	if err != nil {
@@ -218,7 +237,7 @@ func (r *Repository) Checkout(tag reference.Tagged) error {
 	}
 
 	// Tag head
-	err = img.Tag(reference.LocalHeadFromNamed(ref).String())
+	err = img.Tag(reference.LocalHeadFromNamed(r.HeadRef()).String())
 	if err != nil {
 		return fmt.Errorf("failed to add HEAD tag: %w", err)
 	}

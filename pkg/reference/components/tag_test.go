@@ -1,4 +1,4 @@
-package reference
+package components
 
 import (
 	"testing"
@@ -16,16 +16,16 @@ func TestTagFromString(t *testing.T) {
 		{
 			name:          "EmptyTag",
 			tag:           "",
-			expectedError: wrapParseError(repositoryTagParseErrorType, reference.ErrTagInvalidFormat),
+			expectedError: wrapParseError(tagParseErrorType, reference.ErrTagInvalidFormat),
 		},
 		{
 			name:          "InvalidTag",
 			tag:           ".",
-			expectedError: wrapParseError(repositoryTagParseErrorType, reference.ErrTagInvalidFormat),
+			expectedError: wrapParseError(tagParseErrorType, reference.ErrTagInvalidFormat),
 		},
 		{
-			name:          "ValidTag",
-			tag:           "1.0.0",
+			name: "ValidTag",
+			tag:  "1.0.0",
 		},
 	} {
 		t.Run(test.name, func(t *testing.T) {

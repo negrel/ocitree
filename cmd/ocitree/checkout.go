@@ -27,6 +27,7 @@ var checkoutCmd = &cobra.Command{
 		if len(args) > 1 {
 			return errors.New("too many arguments specified")
 		}
+
 		repoRef, err := reference.LocalFromString(args[0])
 		if err != nil {
 			return err

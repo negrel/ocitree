@@ -3,7 +3,6 @@ package reference
 import (
 	"testing"
 
-	"github.com/containers/image/v5/docker/reference"
 	"github.com/stretchr/testify/require"
 )
 
@@ -14,12 +13,12 @@ func TestRemoteReference(t *testing.T) {
 		expectedName      string
 		expectedTag       string
 		expectedReference string
-		expectedError     error
+		expectedErrorMsg  string
 	}{
 		{
-			name:          "EmptyInvalid",
-			reference:     "",
-			expectedError: wrapParseError(remoteRepositoryParseErrorType, reference.ErrReferenceInvalidFormat),
+			name:             "EmptyInvalid",
+			reference:        "",
+			expectedErrorMsg: ErrReferenceMissingName.Error(),
 		},
 		{
 			name:              "FullyQualified/WithCustomDomain/Valid",
@@ -43,14 +42,14 @@ func TestRemoteReference(t *testing.T) {
 			expectedReference: "docker.io/library/archlinux:edge",
 		},
 		{
-			name:          "FullyQualified/WithHEADTag/Invalid",
-			reference:     "docker.io/library/archlinux:HEAD",
-			expectedError: ErrRemoteRepoReferenceContainsReservedTag,
+			name:             "FullyQualified/WithHEADTag/Invalid",
+			reference:        "docker.io/library/archlinux:HEAD",
+			expectedErrorMsg: ErrRemoteRepoReferenceContainsReservedTag.Error(),
 		},
 		{
-			name:          "FullyQualified/WithEmptyTag/Invalid",
-			reference:     "docker.io/library/archlinux:",
-			expectedError: wrapParseError(remoteRepositoryParseErrorType, reference.ErrReferenceInvalidFormat),
+			name:             "FullyQualified/WithEmptyTag/Invalid",
+			reference:        "docker.io/library/archlinux:",
+			expectedErrorMsg: ErrTagInvalidFormat.Error(),
 		},
 		{
 			name:              "FullyQualifiedLocalhostValid",
@@ -67,19 +66,19 @@ func TestRemoteReference(t *testing.T) {
 			expectedReference: "docker.io/library/archlinux:edge",
 		},
 		{
-			name:          "FullyQualified/InvalidTag",
-			reference:     "docker.io/library/archlinux:...",
-			expectedError: wrapParseError(remoteRepositoryParseErrorType, reference.ErrReferenceInvalidFormat),
+			name:             "FullyQualified/InvalidTag",
+			reference:        "docker.io/library/archlinux:...",
+			expectedErrorMsg: "failed to parse repository tag: " + ErrTagInvalidFormat.Error(),
 		},
 		{
-			name:          "InvalidDomain",
-			reference:     ".docker.io/library/archlinux:latest",
-			expectedError: wrapParseError(remoteRepositoryParseErrorType, reference.ErrReferenceInvalidFormat),
+			name:             "InvalidDomain",
+			reference:        ".docker.io/library/archlinux:latest",
+			expectedErrorMsg: "failed to parse repository name: " + ErrReferenceInvalidFormat.Error(),
 		},
 		{
-			name:          "InvalidName",
-			reference:     "docker.io/library/§archlinux§:latest",
-			expectedError: wrapParseError(remoteRepositoryParseErrorType, reference.ErrReferenceInvalidFormat),
+			name:             "InvalidName",
+			reference:        "docker.io/library/§archlinux§:latest",
+			expectedErrorMsg: "failed to parse repository name: " + ErrReferenceInvalidFormat.Error(),
 		},
 		{
 			name:              "MissingDomain/Valid",
@@ -98,9 +97,9 @@ func TestRemoteReference(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			ref, err := RemoteFromString(test.reference)
-			if test.expectedError != nil {
+			if test.expectedErrorMsg != "" {
 				require.Error(t, err)
-				require.Equal(t, test.expectedError, err)
+				require.Equal(t, err.Error(), test.expectedErrorMsg)
 				return
 			}
 			require.NoError(t, err)

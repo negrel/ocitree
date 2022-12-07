@@ -239,6 +239,72 @@ func TestManagerFetch(t *testing.T) {
 	require.Equal(t, []string{ref2.String()}, img.Names())
 }
 
+func TestManagerResolveRelativeReference(t *testing.T) {
+	manager, cleanup := newTestManager(t)
+	defer cleanup()
+
+	ref, err := reference.RemoteFromString("alpine")
+	require.NoError(t, err)
+	headRef := reference.LocalHeadFromNamed(ref)
+
+	// Clone alpine image
+	err = manager.Clone(ref, CloneOptions{
+		PullOptions: PullOptions{
+			MaxRetries:   0,
+			RetryDelay:   0,
+			ReportWriter: os.Stderr,
+		},
+	})
+	require.NoError(t, err)
+
+	repo, err := manager.Repository(ref)
+	require.NoError(t, err)
+
+	// Create one commit
+	err = repo.Exec(ExecOptions{
+		Stdin:        nil,
+		Stdout:       nil,
+		Stderr:       nil,
+		Message:      randomCommitMessage(),
+		ReportWriter: nil,
+	}, "/bin/true")
+	require.NoError(t, err)
+
+	t.Run("ExistingReference", func(t *testing.T) {
+		t.Run("Offset0", func(t *testing.T) {
+			// No offset
+			relRef := reference.RelativeFromReferenceAndOffset(headRef, 0)
+			absRef, err := manager.ResolveRelativeReference(relRef)
+			require.NoError(t, err)
+
+			commits, err := repo.Commits()
+			require.NoError(t, err)
+			require.GreaterOrEqual(t, len(commits), 1)
+
+			require.Equal(t, "sha256:"+commits[0].ID(), absRef.AbsoluteReference())
+		})
+		t.Run("Offset1/HeadBase", func(t *testing.T) {
+			relRef := reference.RelativeFromReferenceAndOffset(headRef, 1)
+			absRef, err := manager.ResolveRelativeReference(relRef)
+			require.NoError(t, err)
+
+			commits, err := repo.Commits()
+			require.NoError(t, err)
+			require.GreaterOrEqual(t, len(commits), 2)
+
+			require.Equal(t, "sha256:"+commits[1].ID(), absRef.AbsoluteReference())
+		})
+	})
+	t.Run("MissingReference", func(t *testing.T) {
+		t.Run("Offset1/LatestBase", func(t *testing.T) {
+			relRef := reference.RelativeFromReferenceAndOffset(ref, 1)
+			absRef, err := manager.ResolveRelativeReference(relRef)
+			require.Error(t, ErrCommitHasNoImageAssociated, err)
+			require.Nil(t, absRef)
+		})
+	})
+}
+
 func newTestManager(t *testing.T) (manager *Manager, cleanup func()) {
 	store, systemContext, workdir := newStoreAndSystemContext(t)
 

@@ -6,7 +6,7 @@ import (
 	"regexp"
 	"strconv"
 
-	"github.com/containers/image/v5/docker/reference"
+	"github.com/negrel/ocitree/pkg/reference/components"
 )
 
 var (
@@ -53,21 +53,17 @@ func RelativeFromString(ref string) (Relative, error) {
 
 	// Parse base reference
 	var baseRef Reference
-	// If reference is an identifier
-	if reference.ShortIdentifierRegexp.MatchString(ref) {
-		id, err := IdentifierFromString(ref)
-		if err != nil {
-			return Relative{}, fmt.Errorf("failed to parse base reference identifier: %w", err)
-		}
+	name, tag, id, err := splitComponents(ref)
+	if err != nil {
+		return Relative{}, err
+	}
+	if tag == "" && id == "" {
+		tag = components.Head
+	}
 
-		baseRef = id
-	} else {
-		localRef, err := LocalFromString(ref)
-		if err != nil {
-			return Relative{}, fmt.Errorf("failed to parse local base reference: %w", err)
-		}
-
-		baseRef = localRef
+	baseRef, err = newInnerRef(name, tag, id)
+	if err != nil {
+		return Relative{}, err
 	}
 
 	return RelativeFromReferenceAndOffset(
