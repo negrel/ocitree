@@ -13,7 +13,7 @@ import (
 	"github.com/containers/buildah/define"
 	"github.com/containers/image/v5/types"
 	"github.com/containers/storage/pkg/archive"
-	"github.com/negrel/ocitree/pkg/reference"
+	refcomp "github.com/negrel/ocitree/pkg/reference/components"
 	"github.com/sirupsen/logrus"
 )
 
@@ -220,13 +220,8 @@ func (r *Repository) Exec(options ExecOptions, cmd string, args ...string) error
 }
 
 // RebaseSession starts and returns a new RebaseSession with the given tag as base reference.
-func (r *Repository) RebaseSession(tagged reference.Tagged) (*RebaseSession, error) {
-	ref, err := reference.RemoteFromNamedTagged(r.headRef, tagged)
-	if err != nil {
-		return nil, err
-	}
-
-	return newRebaseSession(r.runtime, r, ref)
+func (r *Repository) RebaseSession(idtag refcomp.IdentifierOrTag) (*RebaseSession, error) {
+	return newRebaseSession(r.runtime, r, idtag)
 }
 
 func commit(builder *buildah.Builder, options CommitOptions, sref types.ImageReference, systemContext *types.SystemContext) error {

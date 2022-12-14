@@ -13,6 +13,7 @@ import (
 	"github.com/containers/common/libimage"
 	"github.com/containers/storage/pkg/archive"
 	"github.com/negrel/ocitree/pkg/reference"
+	refcomp "github.com/negrel/ocitree/pkg/reference/components"
 	"github.com/sirupsen/logrus"
 )
 
@@ -170,8 +171,8 @@ type RebaseSession struct {
 	runtime    imageRuntime
 }
 
-func newRebaseSession(store imageRuntime, repo *Repository, tagged reference.Tagged) (*RebaseSession, error) {
-	baseRef, err := reference.RemoteFromNamedTagged(repo.HeadRef(), tagged)
+func newRebaseSession(store imageRuntime, repo *Repository, idtag refcomp.IdentifierOrTag) (*RebaseSession, error) {
+	baseRef, err := reference.RemoteFromNamedAndIdTag(repo.HeadRef(), idtag)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create remote repository reference: %w", err)
 	}
@@ -180,7 +181,7 @@ func newRebaseSession(store imageRuntime, repo *Repository, tagged reference.Tag
 	if err != nil {
 		return nil, fmt.Errorf("failed to find new base: %w", err)
 	}
-	err = baseImage.Tag(reference.LocalRebaseFromNamed(baseRef).String())
+	err = baseImage.Tag(reference.LocalRebaseFromNamed(baseRef).AbsoluteReference())
 	if err != nil {
 		return nil, fmt.Errorf("failed add REBASE_HEAD tag to new base: %w", err)
 	}
@@ -244,13 +245,13 @@ func (rs *RebaseSession) Apply() error {
 	}
 
 	// Move HEAD reference
-	err = rs.repository.Checkout(reference.RebaseHeadTag)
+	err = rs.repository.Checkout(rs.RebaseHead())
 	if err != nil {
 		return fmt.Errorf("failed to checkout to rebase head: %w", err)
 	}
 
 	// Remove REBASE_HEAD reference
-	err = rs.repository.removeLocalTag(reference.RebaseHeadTag)
+	err = rs.repository.removeLocalTag(refcomp.RebaseHeadTag)
 	if err != nil {
 		return fmt.Errorf("failed to remove rebase head tag: %w", err)
 	}
@@ -340,7 +341,7 @@ func (rs *RebaseSession) pick(builder *buildah.Builder, commit *RebaseCommit) er
 
 // RebaseHead returns reference to rebase head.
 func (rs *RebaseSession) RebaseHead() reference.LocalRepository {
-	return reference.LocalFromNamedTagged(rs.baseRef, reference.RebaseHeadTag)
+	return reference.LocalRebaseFromNamed(rs.baseRef)
 }
 
 // create builder from REBASE_HEAD

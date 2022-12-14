@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"github.com/negrel/ocitree/pkg/libocitree"
-	"github.com/negrel/ocitree/pkg/reference"
+	refcomp "github.com/negrel/ocitree/pkg/reference/components"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )
@@ -26,7 +26,7 @@ var umountCmd = &cobra.Command{
 		if len(args) > 1 {
 			return errors.New("too many arguments specified")
 		}
-		repoName, err := reference.NameFromString(args[0])
+		repoName, err := refcomp.NameFromString(args[0])
 		if err != nil {
 			return err
 		}

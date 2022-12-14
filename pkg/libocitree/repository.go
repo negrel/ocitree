@@ -8,8 +8,11 @@ import (
 
 	"github.com/containers/buildah"
 	"github.com/containers/common/libimage"
+	dockerref "github.com/containers/image/v5/docker/reference"
 	"github.com/containers/image/v5/types"
 	"github.com/negrel/ocitree/pkg/reference"
+	refcomp "github.com/negrel/ocitree/pkg/reference/components"
+	"github.com/sirupsen/logrus"
 )
 
 var (
@@ -44,11 +47,11 @@ func newRepositoryFromImage(store imageRuntime, head *libimage.Image) (*Reposito
 	if repoName == "" {
 		return nil, ErrRepositoryInvalidNoName
 	}
-	nameRef, err := reference.NameFromString(repoName)
+	name, err := refcomp.NameFromString(repoName)
 	if err != nil {
 		panic(err)
 	}
-	headRef := reference.LocalHeadFromNamed(nameRef)
+	headRef := reference.LocalHeadFromNamed(name)
 
 	return &Repository{
 		headRef: headRef,
@@ -57,7 +60,7 @@ func newRepositoryFromImage(store imageRuntime, head *libimage.Image) (*Reposito
 	}, nil
 }
 
-func newRepositoryFromName(store imageRuntime, name reference.Named) (*Repository, error) {
+func newRepositoryFromName(store imageRuntime, name refcomp.Named) (*Repository, error) {
 	ref := reference.LocalHeadFromNamed(name)
 
 	head, err := store.lookupImage(ref)
@@ -87,10 +90,10 @@ func (r *Repository) HeadRef() reference.LocalRepository {
 	return r.headRef
 }
 
-// HeadTags returns other tags pointing to the same commit as HEAD.
-func (r *Repository) HeadTags() []string {
+// OtherHeadRefs returns other reference to HEAD.
+func (r *Repository) OtherHeadRefs() []reference.Reference {
 	names := r.head.Names()
-	tags := make([]string, 0, len(names))
+	refs := make([]reference.Reference, 0, len(names))
 
 	for _, name := range names {
 		ref, err := reference.RemoteFromString(name)
@@ -99,22 +102,21 @@ func (r *Repository) HeadTags() []string {
 		}
 
 		if ref.Name() == r.Name() {
-			tags = append(tags, ref.Tag())
+			refs = append(refs, ref)
 		}
 	}
 
-	return tags
+	return refs
 }
 
-// OtherTags returns tags associated to this repository without tags associated to
-// HEAD.
-func (r *Repository) OtherTags() ([]string, error) {
+// OtherRefs returns tags associated to this repository but not pointing to HEAD.
+func (r *Repository) OtherRefs() ([]reference.Reference, error) {
 	images, err := r.runtime.listImages("reference=" + r.Name() + ":*")
 	if err != nil {
 		return nil, fmt.Errorf("failed to list repository reference: %w", err)
 	}
 
-	tags := make([]string, 0, len(images))
+	refs := make([]reference.Reference, 0, len(images))
 
 	for _, img := range images {
 		if img.ID() == r.ID() {
@@ -128,15 +130,15 @@ func (r *Repository) OtherTags() ([]string, error) {
 				continue
 			}
 
-			tags = append(tags, imgRef.Tag())
+			refs = append(refs, imgRef)
 		}
 	}
 
-	return tags, nil
+	return refs, nil
 }
 
 // AddTag adds the given tag to HEAD.
-func (r *Repository) AddTag(tag reference.Tag) error {
+func (r *Repository) AddTag(tag refcomp.Tag) error {
 	ref, err := reference.RemoteFromString(r.Name() + ":" + tag.Tag())
 	if err != nil {
 		return err
@@ -146,7 +148,7 @@ func (r *Repository) AddTag(tag reference.Tag) error {
 }
 
 // RemoveTag returns the given tag from HEAD.
-func (r *Repository) RemoveTag(tag reference.Tag) error {
+func (r *Repository) RemoveTag(tag refcomp.Tag) error {
 	ref, err := reference.RemoteFromString(r.Name() + ":" + tag.Tag())
 	if err != nil {
 		return err
@@ -156,10 +158,10 @@ func (r *Repository) RemoveTag(tag reference.Tag) error {
 }
 
 // removeLocalTag removes the given tag even if it's a local one (e.g. REBASE_HEAD)
-func (r *Repository) removeLocalTag(tag reference.Tagged) error {
+func (r *Repository) removeLocalTag(tag refcomp.Tag) error {
 	ref := reference.LocalFromNamedTagged(r.HeadRef(), tag)
 
-	return r.head.Untag(ref.String())
+	return r.head.Untag(ref.AbsoluteReference())
 }
 
 // Commits returns the commits history of this repository.
@@ -183,9 +185,9 @@ func (r *Repository) Unmount() error {
 	return r.head.Unmount(true)
 }
 
-func findRepoName(names []reference.NamedTagged) string {
+func findRepoName(names []dockerref.NamedTagged) string {
 	for _, name := range names {
-		if name.Tag() == reference.Head {
+		if name.Tag() == refcomp.Head {
 			return name.Name()
 		}
 	}
@@ -212,15 +214,22 @@ func (r *Repository) Checkout(id reference.Reference) error {
 		return fmt.Errorf("failed to lookup checkout reference: %w", err)
 	}
 
-	names, err := img.NamedRepoTags()
-	if err != nil {
-		return fmt.Errorf("failed to retrieve checkout image names: %w", err)
-	}
+	names := img.Names()
+	names = append(names, img.NamesHistory()...)
 
 	// Ensure image names is same as repository name.
-	for _, named := range names {
-		if named.Name() == r.Name() {
-			return r.checkout(id)
+	for _, name := range names {
+		ref, err := dockerref.Parse(name)
+		if err != nil {
+			logrus.Debugf("skipping %v because %v", ref, err)
+			continue
+		}
+		if named, isNamed := ref.(dockerref.Named); isNamed {
+			if named.Name() == r.Name() {
+				return nil
+			}
+		} else {
+			logrus.Debugf("skipping %v because reference is not named")
 		}
 	}
 
@@ -237,7 +246,7 @@ func (r *Repository) checkout(ref reference.Reference) error {
 	}
 
 	// Tag head
-	err = img.Tag(reference.LocalHeadFromNamed(r.HeadRef()).String())
+	err = img.Tag(reference.LocalHeadFromNamed(r.HeadRef()).AbsoluteReference())
 	if err != nil {
 		return fmt.Errorf("failed to add HEAD tag: %w", err)
 	}

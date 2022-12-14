@@ -6,7 +6,7 @@ import (
 	"os"
 
 	"github.com/negrel/ocitree/pkg/libocitree"
-	"github.com/negrel/ocitree/pkg/reference"
+	refcomp "github.com/negrel/ocitree/pkg/reference/components"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )
@@ -26,13 +26,13 @@ var tagCmd = &cobra.Command{
 		if len(args) == 0 {
 			return errors.New("a repository name must be specified")
 		}
-		repoName, err := reference.NameFromString(args[0])
+		repoName, err := refcomp.NameFromString(args[0])
 		if err != nil {
 			return err
 		}
-		tags := make([]reference.Tag, len(args)-1)
+		tags := make([]refcomp.Tag, len(args)-1)
 		for i, tag := range args[1:] {
-			tags[i], err = reference.TagFromString(tag)
+			tags[i], err = refcomp.TagFromString(tag)
 			if err != nil {
 				return fmt.Errorf("tag %q invalid: %v", tag, err)
 			}

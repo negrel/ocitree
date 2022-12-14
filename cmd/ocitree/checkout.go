@@ -28,7 +28,7 @@ var checkoutCmd = &cobra.Command{
 			return errors.New("too many arguments specified")
 		}
 
-		repoRef, err := reference.LocalFromString(args[0])
+		repoRef, err := reference.RemoteFromString(args[0])
 		if err != nil {
 			return err
 		}
@@ -51,17 +51,17 @@ var checkoutCmd = &cobra.Command{
 			os.Exit(1)
 		}
 		beforeIDs := repo.ID()[:16]
-		if tags := repo.HeadTags(); len(tags) > 0 {
+		if tags := repo.OtherHeadRefs(); len(tags) > 0 {
 			beforeIDs = fmt.Sprintf("%q (%v)", tags, beforeIDs)
 		}
 
 		err = repo.Checkout(repoRef)
 		if err != nil {
-			logrus.Errorf("failed to checkout repository %q to tag %q: %v", repoRef.Name(), repoRef.Tag(), err)
+			logrus.Errorf("failed to checkout repository %q to %q: %v", repoRef.Name(), repoRef.IdOrTag(), err)
 			os.Exit(1)
 		}
 
-		afterID := fmt.Sprintf("%q (%v)", repoRef.Tag(), repo.ID()[:16])
+		afterID := fmt.Sprintf("%q (%v)", repoRef.IdOrTag(), repo.ID()[:16])
 		fmt.Printf("Previous HEAD position was %v\n", beforeIDs)
 		fmt.Printf("Switched to %v\n", afterID)
 
