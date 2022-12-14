@@ -12,6 +12,8 @@ var (
 	ErrReferenceInvalidFormat = reference.ErrReferenceInvalidFormat
 	ErrTagInvalidFormat       = reference.ErrTagInvalidFormat
 	ErrIdInvalidFormat        = errors.New("invalid id format")
+
+	ErrReferenceMissingIdOrTag = errors.New("reference has no tag or id")
 )
 
 // Named is a reference with a name.
@@ -35,8 +37,7 @@ type Tagged interface {
 // Identifier is a reference which has an ID.
 type Identifier interface {
 	Reference
-
-	ID() string
+	components.Identifier
 }
 
 // NamedWithIdentifier is a reference which has a name and an ID.
@@ -45,61 +46,47 @@ type NamedWithIdentifier interface {
 	Identifier
 }
 
+// EitherTaggedOrIdentifier define a reference which has a name
+// and either an ID or a Tag.
+type EitherTaggedOrIdentifier interface {
+	Named
+	IdOrTag() string
+}
+
 // Reference is an opaque object reference identifier that may include modifiers
 // such as a local, remote and relative reference.
 type Reference interface {
 	AbsoluteReference() string
 }
 
-func splitComponents(ref string) (name, tag, id string, err error) {
-	splitted := strings.SplitN(ref, ":", 2)
-	hasTag := len(splitted) == 2
-	splitted2 := strings.SplitN(ref, "@", 2)
-	hasID := len(splitted2) == 2
-
-	name = splitted[0]
-	if hasTag {
-		tag = splitted[1]
-		if len(tag) == 0 {
-			err = ErrTagInvalidFormat
-			return
-		}
-	}
-	if hasID {
-		id = splitted2[1]
-		if len(id) == 0 {
-			err = ErrIdInvalidFormat
-			return
-		}
+func splitComponents(ref string) (name, idtag string) {
+	splitted := strings.SplitN(ref, components.IdPrefix, 2)
+	if hasID := len(splitted) == 2; hasID {
+		return splitted[0], splitted[1]
 	}
 
-	return
+	splitted = strings.SplitN(ref, components.TagPrefix, 2)
+	if hasTag := len(splitted) == 2; hasTag {
+		return splitted[0], splitted[1]
+	}
+
+	return ref, ""
 }
 
 type innerRef struct {
-	name components.Name
-	tag  components.Tag
-	id   components.ID
+	name  components.Name
+	idtag components.IdentifierOrTag
 }
 
-func newInnerRef(name, tag, id string) (ref innerRef, err error) {
+func newInnerRef(name, idtag string) (ref innerRef, err error) {
 	ref.name, err = components.NameFromString(name)
 	if err != nil {
 		return
 	}
 
-	if tag != "" {
-		ref.tag, err = components.TagFromString(tag)
-		if err != nil {
-			return
-		}
-	}
-
-	if id != "" {
-		ref.id, err = components.IdFromString(id)
-		if err != nil {
-			return
-		}
+	ref.idtag, err = components.IdentifierOrTagFromString(idtag)
+	if err != nil {
+		return
 	}
 
 	return
@@ -109,19 +96,35 @@ func newInnerRef(name, tag, id string) (ref innerRef, err error) {
 func (ir innerRef) AbsoluteReference() string {
 	result := strings.Builder{}
 	name := ir.name.Name()
-	tag := ir.tag.Tag()
-	id := ir.id.ID()
-	result.Grow(len(name) + len(tag) + len(id) + len(":@sha256:"))
+	idtag := ir.idtag.IdOrTag()
+	result.Grow(len(name) + len(idtag))
 
 	result.WriteString(name)
-	if len(tag) != 0 {
-		result.WriteRune(':')
-		result.WriteString(tag)
-	}
-	if len(id) != 0 {
-		result.WriteString("@sha256:")
-		result.WriteString(id)
-	}
+	result.WriteString(idtag)
 
 	return result.String()
+}
+
+type dockerRef struct {
+	Reference
+}
+
+// Name implements reference.Named
+func (dr dockerRef) Name() string {
+	return dr.Reference.(Named).Name()
+}
+
+// String implements reference.Reference
+func (dr dockerRef) String() string {
+	return dr.AbsoluteReference()
+}
+
+// DockerRef wraps an absolute reference and converts it to reference.Reference.
+func DockerRef(ref Reference) reference.Reference {
+	return dockerRef{Reference: ref}
+}
+
+// DockerRef wraps an absolute named reference and converts it to reference.Named.
+func NamedDockerRef(ref Named) reference.Named {
+	return dockerRef{Reference: ref}
 }

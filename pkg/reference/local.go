@@ -23,18 +23,15 @@ type LocalRepository struct {
 // LocalFromString returns a local repository reference from the given string
 // after validating and normalizing it. An error is returned if the reference is invalid.
 func LocalFromString(localRef string) (LocalRepository, error) {
-	name, tag, id, err := splitComponents(localRef)
-	if err != nil {
-		return LocalRepository{}, err
-	}
+	name, idtag := splitComponents(localRef)
 	if name == "" {
 		return LocalRepository{}, ErrReferenceMissingName
 	}
-	if tag == "" && id == "" {
-		tag = components.Head
+	if idtag == "" {
+		idtag = components.Head
 	}
 
-	ref, err := newInnerRef(name, tag, id)
+	ref, err := newInnerRef(name, idtag)
 	if err != nil {
 		return LocalRepository{}, err
 	}
@@ -45,32 +42,69 @@ func LocalFromString(localRef string) (LocalRepository, error) {
 }
 
 // LocalFromRemote converts a RemoteRepository reference to a LocalRepository.
-//func LocalFromRemote(remoteRef RemoteRepository) LocalRepository {
-//	return LocalRepository{named: remoteRef.named}
-//}
+func LocalFromRemote(remoteRef RemoteRepository) LocalRepository {
+	return LocalRepository{innerRef: remoteRef.innerRef}
+}
 
-// LocalHeadFromNamed returns a new LocalRepository with "HEAD" tag and
+// LocalHeadFromNamed returns a new local referenece with "HEAD" tag and
 // name of the given named.
-//func LocalHeadFromNamed(ref Named) LocalRepository {
-//	l, _ := LocalFromString(ref.Name() + ":" + Head)
-//	return l
-//}
+func LocalHeadFromNamed(ref components.Named) LocalRepository {
+	l, _ := LocalFromString(ref.Name() + ":" + components.Head)
+	return l
+}
 
-// LocalRebaseHeadFromNamed returns a new LocalRepository with "REBASE_HEAD" tag and
+// LocalRebaseHeadFromNamed returns a new local reference with "REBASE_HEAD" tag and
 // name of the given named.
-//func LocalRebaseFromNamed(ref Named) LocalRepository {
-//	l, _ := LocalFromString(ref.Name() + ":" + RebaseHead)
-//	return l
-//}
+func LocalRebaseFromNamed(ref components.Named) LocalRepository {
+	l, _ := LocalFromString(ref.Name() + ":" + components.RebaseHead)
+	return l
+}
 
-// LocalFromNamedTagged returns a new LocalRepositry with the given tag and
+// LocalFromNamedTagged returns a new local reference with the given tag and
 // name.
-//func LocalFromNamedTagged(named Named, tagged Tagged) LocalRepository {
-//	l, _ := LocalFromString(named.Name() + ":" + tagged.Tag())
-//	return l
-//}
+func LocalFromNamedTagged(name components.Named, tag components.Tagged) LocalRepository {
+	l, _ := LocalFromString(name.Name() + ":" + tag.Tag())
+	return l
+}
+
+// LocalFromNamedAndId returns a new local reference with the given
+// id and name.
+func LocalFromNamedAndId(name components.Named, id components.Identifier) LocalRepository {
+	l, _ := LocalFromString(name.Name() + "@sha256:" + id.ID())
+	return l
+}
 
 // Name implements Named interface.
 func (lr LocalRepository) Name() string {
 	return lr.innerRef.name.Name()
+}
+
+// IdOrTag returns either the ID or the tag of the reference.
+func (lr LocalRepository) IdOrTag() string {
+	return lr.innerRef.idtag.IdOrTag()
+}
+
+// NameComponent returns the name components of the reference.
+func (lr LocalRepository) NameComponent() components.Name {
+	return lr.innerRef.name
+}
+
+// TagComponent returns the tag components of the reference.
+// Tag may be nil if reference does't contain a tag.
+func (lr LocalRepository) TagComponent() *components.Tag {
+	if cTag, isTag := lr.innerRef.idtag.(*components.Tag); isTag {
+		return cTag
+	}
+
+	return nil
+}
+
+// IdComponent returns the identifier components of the reference.
+// Id may be nil if reference does't contain a id.
+func (lr LocalRepository) IdComponent() *components.ID {
+	if cId, isId := lr.innerRef.idtag.(*components.ID); isId {
+		return cId
+	}
+
+	return nil
 }

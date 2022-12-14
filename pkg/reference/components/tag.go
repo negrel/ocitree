@@ -14,7 +14,12 @@ var (
 	LatestTag     = Tag{tag: Latest}
 )
 
+const (
+	TagPrefix = ":"
+)
+
 var _ Tagged = Tag{}
+var _ IdentifierOrTag = Tag{}
 
 // Tag define the tag component of a repository reference.
 type Tag struct {
@@ -37,6 +42,11 @@ func TagFromString(tag string) (Tag, error) {
 
 func TagFromTagged(tag Tagged) Tag {
 	return Tag{tag: tag.Tag()}
+}
+
+// IdOrTag implements IdentifierOrTag
+func (t Tag) IdOrTag() string {
+	return TagPrefix + t.Tag()
 }
 
 // String implements reference.Reference

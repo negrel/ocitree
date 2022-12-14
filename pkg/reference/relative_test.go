@@ -3,6 +3,7 @@ package reference
 import (
 	"testing"
 
+	"github.com/negrel/ocitree/pkg/reference/components"
 	"github.com/stretchr/testify/require"
 )
 
@@ -53,7 +54,7 @@ func TestRelativeFromString(t *testing.T) {
 		{
 			name:                 "InvalidBaseRef",
 			reference:            "archlinux:...",
-			expectedErrorMessage: "failed to parse repository tag: invalid tag format",
+			expectedErrorMessage: components.ErrNotIdentifierNorTag.Error(),
 		},
 	} {
 		t.Run(test.name, func(t *testing.T) {

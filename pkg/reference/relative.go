@@ -53,15 +53,12 @@ func RelativeFromString(ref string) (Relative, error) {
 
 	// Parse base reference
 	var baseRef Reference
-	name, tag, id, err := splitComponents(ref)
-	if err != nil {
-		return Relative{}, err
-	}
-	if tag == "" && id == "" {
-		tag = components.Head
+	name, idtag := splitComponents(ref)
+	if idtag == "" {
+		idtag = components.Head
 	}
 
-	baseRef, err = newInnerRef(name, tag, id)
+	baseRef, err := newInnerRef(name, idtag)
 	if err != nil {
 		return Relative{}, err
 	}

@@ -12,7 +12,12 @@ var (
 	ErrIdContainsNoDigest = errors.New("identifier contains no digest")
 )
 
+const (
+	IdPrefix = "@sha256:"
+)
+
 var _ Identifier = ID{}
+var _ IdentifierOrTag = ID{}
 
 type ID struct {
 	id string
@@ -47,4 +52,9 @@ func (i ID) ID() string {
 // String implements fmt.Stringer
 func (i ID) String() string {
 	return i.id
+}
+
+// IdOrTag implements IdentifierOrTag
+func (i ID) IdOrTag() string {
+	return IdPrefix + i.ID()
 }
