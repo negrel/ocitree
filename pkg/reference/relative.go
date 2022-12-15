@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"regexp"
 	"strconv"
-
-	"github.com/negrel/ocitree/pkg/reference/components"
 )
 
 var (
@@ -52,13 +50,7 @@ func RelativeFromString(ref string) (Relative, error) {
 	}
 
 	// Parse base reference
-	var baseRef Reference
-	name, idtag := splitComponents(ref)
-	if idtag == "" {
-		idtag = components.Head
-	}
-
-	baseRef, err := newInnerRef(name, idtag)
+	baseRef, err := LocalRefFromString(ref)
 	if err != nil {
 		return Relative{}, err
 	}

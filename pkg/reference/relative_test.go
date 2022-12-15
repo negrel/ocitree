@@ -3,17 +3,17 @@ package reference
 import (
 	"testing"
 
-	"github.com/negrel/ocitree/pkg/reference/components"
+	"github.com/containers/image/v5/docker/reference"
 	"github.com/stretchr/testify/require"
 )
 
 func TestRelativeFromString(t *testing.T) {
 	for _, test := range []struct {
-		name                 string
-		reference            string
-		expectedBase         string
-		expectedOffset       uint
-		expectedErrorMessage string
+		name           string
+		reference      string
+		expectedBase   string
+		expectedOffset uint
+		expectedError  error
 	}{
 		{
 			name:           "WithoutOffset",
@@ -52,20 +52,20 @@ func TestRelativeFromString(t *testing.T) {
 			expectedOffset: 2,
 		},
 		{
-			name:                 "InvalidBaseRef",
-			reference:            "archlinux:...",
-			expectedErrorMessage: components.ErrNotIdentifierNorTag.Error(),
+			name:          "InvalidBaseRef",
+			reference:     "archlinux:...",
+			expectedError: reference.ErrReferenceInvalidFormat,
 		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			ref, err := RelativeFromString(test.reference)
-			if test.expectedErrorMessage != "" {
+			if test.expectedError != nil {
 				require.Error(t, err)
-				require.Equal(t, test.expectedErrorMessage, err.Error())
+				require.Equal(t, test.expectedError, err)
 				return
 			}
 			require.NoError(t, err)
-			require.Equal(t, test.expectedBase, ref.Base().AbsoluteReference())
+			require.Equal(t, test.expectedBase, ref.Base().String())
 			require.Equal(t, test.expectedOffset, ref.Offset())
 		})
 	}
