@@ -6,7 +6,7 @@ import (
 	"os"
 
 	"github.com/negrel/ocitree/pkg/libocitree"
-	refcomp "github.com/negrel/ocitree/pkg/reference/components"
+	"github.com/negrel/ocitree/pkg/reference"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )
@@ -26,13 +26,13 @@ var tagCmd = &cobra.Command{
 		if len(args) == 0 {
 			return errors.New("a repository name must be specified")
 		}
-		repoName, err := refcomp.NameFromString(args[0])
+		repoName, err := reference.NameFromString(args[0])
 		if err != nil {
 			return err
 		}
-		tags := make([]refcomp.Tag, len(args)-1)
+		tags := make([]reference.Tag, len(args)-1)
 		for i, tag := range args[1:] {
-			tags[i], err = refcomp.TagFromString(tag)
+			tags[i], err = reference.RemoteTagFromString(tag)
 			if err != nil {
 				return fmt.Errorf("tag %q invalid: %v", tag, err)
 			}
@@ -52,7 +52,7 @@ var tagCmd = &cobra.Command{
 
 		repo, err := manager.Repository(repoName)
 		if err != nil {
-			logrus.Errorf("failed to retrieve repository %q: %v", repoName.Name(), err)
+			logrus.Errorf("failed to retrieve repository %q: %v", repoName, err)
 			os.Exit(1)
 		}
 

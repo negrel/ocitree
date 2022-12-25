@@ -27,7 +27,7 @@ var cloneCmd = &cobra.Command{
 		if len(args) > 1 {
 			return errors.New("too many arguments specified")
 		}
-		repoRef, err := reference.RemoteFromString(args[0])
+		repoRef, err := reference.RemoteRefFromString(args[0])
 		if err != nil {
 			return err
 		}

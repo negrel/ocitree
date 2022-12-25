@@ -8,7 +8,7 @@ import (
 
 	"github.com/docker/go-units"
 	"github.com/negrel/ocitree/pkg/libocitree"
-	refcomp "github.com/negrel/ocitree/pkg/reference/components"
+	"github.com/negrel/ocitree/pkg/reference"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )
@@ -29,7 +29,7 @@ var logCmd = &cobra.Command{
 		if len(args) > 1 {
 			return errors.New("too many arguments specified")
 		}
-		repoName, err := refcomp.NameFromString(args[0])
+		repoName, err := reference.NameFromString(args[0])
 		if err != nil {
 			return err
 		}
@@ -48,17 +48,17 @@ var logCmd = &cobra.Command{
 
 		repo, err := manager.Repository(repoName)
 		if err != nil {
-			logrus.Errorf("failed to retrieve repository %q: %v", repoName.Name(), err)
+			logrus.Errorf("failed to retrieve repository %q: %v", repoName, err)
 			os.Exit(1)
 		}
 
 		commits, err := repo.Commits()
 		if err != nil {
-			logrus.Errorf("failed to list commits of %q: %v", repoName.Name(), err)
+			logrus.Errorf("failed to list commits of %q: %v", repoName, err)
 			os.Exit(1)
 		}
 
-		fmt.Println(repoName.Name())
+		fmt.Println(repoName)
 		for _, commit := range commits {
 			fmt.Printf("commit %v (%v) %v\n", commit.ID(), units.BytesSize(float64(commit.Size())), commit.Tags())
 			fmt.Printf("Date %v\n", commit.CreationDate().Format(time.RubyDate))

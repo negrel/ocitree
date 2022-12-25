@@ -28,7 +28,7 @@ var checkoutCmd = &cobra.Command{
 			return errors.New("too many arguments specified")
 		}
 
-		repoRef, err := reference.RemoteFromString(args[0])
+		repoRef, err := reference.RemoteRefFromString(args[0])
 		if err != nil {
 			return err
 		}
@@ -45,13 +45,13 @@ var checkoutCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
-		repo, err := manager.Repository(repoRef)
+		repo, err := manager.Repository(repoRef.Name())
 		if err != nil {
 			logrus.Errorf("failed to find a repository: %v", err)
 			os.Exit(1)
 		}
 		beforeIDs := repo.ID()[:16]
-		if tags := repo.OtherHeadRefs(); len(tags) > 0 {
+		if tags := repo.OtherHeadTags(); len(tags) > 0 {
 			beforeIDs = fmt.Sprintf("%q (%v)", tags, beforeIDs)
 		}
 

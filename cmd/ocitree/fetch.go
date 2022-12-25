@@ -26,7 +26,7 @@ var fetchCmd = &cobra.Command{
 		if len(args) > 1 {
 			return errors.New("too many arguments specified")
 		}
-		repoName, err := reference.RemoteFromString(args[0])
+		repoName, err := reference.RemoteRefFromString(args[0])
 		if err != nil {
 			return err
 		}

@@ -28,7 +28,7 @@ var rebaseCmd = &cobra.Command{
 		if len(args) > 1 {
 			return errors.New("too many arguments specified")
 		}
-		rebaseRef, err := reference.RemoteFromString(args[0])
+		rebaseRef, err := reference.RemoteRefFromString(args[0])
 		if err != nil {
 			return err
 		}
@@ -38,7 +38,7 @@ var rebaseCmd = &cobra.Command{
 	},
 }
 
-func rebase(cmd *cobra.Command, args []string, rebaseRef reference.RemoteRepository) int {
+func rebase(cmd *cobra.Command, args []string, rebaseRef reference.RemoteRef) int {
 	store, err := containersStore()
 	if err != nil {
 		logrus.Errorf("failed to create containers store: %v", err)
@@ -51,7 +51,7 @@ func rebase(cmd *cobra.Command, args []string, rebaseRef reference.RemoteReposit
 		return 1
 	}
 
-	repo, err := manager.Repository(rebaseRef)
+	repo, err := manager.Repository(rebaseRef.Name())
 	if err != nil {
 		logrus.Errorf("repository not found: %v", err)
 		return 1
