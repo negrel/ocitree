@@ -36,9 +36,9 @@ func TestManagerClone(t *testing.T) {
 	defer cleanup()
 
 	const repoName = "docker.io/library/alpine"
-	repoHeadRef, err := reference.LocalFromString(repoName)
+	repoHeadRef, err := reference.LocalRefFromString(repoName)
 	require.NoError(t, err)
-	remoteRef, err := reference.RemoteFromString(repoName)
+	remoteRef, err := reference.RemoteRefFromString(repoName)
 	require.NoError(t, err)
 
 	runtime := manager.rt
@@ -133,7 +133,7 @@ func TestManagerRepository(t *testing.T) {
 	require.NoError(t, err)
 
 	t.Run("ImageMissing", func(t *testing.T) {
-		imageExist, err := runtime.Exists(repoName.Name())
+		imageExist, err := runtime.Exists(repoName.String())
 		require.NoError(t, err)
 		require.False(t, imageExist, "image is not missing")
 
@@ -143,16 +143,16 @@ func TestManagerRepository(t *testing.T) {
 	})
 
 	t.Run("RepositoryExist", func(t *testing.T) {
-		err = manager.Clone(reference.RemoteLatestFromNamed(repoName), CloneOptions{})
+		err = manager.Clone(reference.RemoteFromName(repoName), CloneOptions{})
 		require.NoError(t, err)
 
 		// Get repository
 		repo, err := manager.Repository(repoName)
 		require.NoError(t, err)
-		require.Equal(t, repoName.Name(), repo.Name())
+		require.Equal(t, repoName.String(), repo.Name().String())
 
 		// Compare ID of image and returned repository
-		image, _, err := runtime.LookupImage(reference.LocalHeadFromNamed(repoName).String(), nil)
+		image, _, err := runtime.LookupImage(reference.LocalFromName(repoName).String(), nil)
 		require.NoError(t, err)
 		require.Equal(t, image.ID(), repo.ID())
 	})
@@ -164,10 +164,10 @@ func TestManagerRepositories(t *testing.T) {
 
 	// List of repository
 	repositoriesName := []string{"docker.io/library/alpine", "docker.io/library/archlinux", "docker.io/library/ubuntu"}
-	repositoriesRef := make([]reference.RemoteRepository, 3)
+	repositoriesRef := make([]reference.RemoteRef, 3)
 	for i, name := range repositoriesName {
 		var err error
-		repositoriesRef[i], err = reference.RemoteFromString(name)
+		repositoriesRef[i], err = reference.RemoteRefFromString(name)
 		require.NoError(t, err)
 	}
 
@@ -182,7 +182,7 @@ func TestManagerRepositories(t *testing.T) {
 	require.Len(t, repositories, len(repositoriesRef), "length of repository list doesn't match number of cloned repositories")
 
 	for _, repo := range repositories {
-		require.Contains(t, repositoriesName, repo.Name())
+		require.Contains(t, repositoriesName, repo.Name().String())
 	}
 }
 
@@ -196,26 +196,26 @@ func TestManagerFetch(t *testing.T) {
 		ReportWriter: os.Stderr,
 	}
 
-	ref, err := reference.RemoteFromString("alpine:3.15")
+	ref, err := reference.RemoteRefFromString("alpine:3.15")
 	require.NoError(t, err)
-	headRef := reference.LocalHeadFromNamed(ref)
+	headRef := reference.LocalFromName(ref.Name())
 
 	err = manager.Clone(ref, CloneOptions{
 		PullOptions: pullOptions,
 	})
 	require.NoError(t, err)
 
-	img, _, err := manager.rt.LookupImage(reference.LocalFromRemote(ref).String(), nil)
+	img, _, err := manager.rt.LookupImage(ref.String(), nil)
 	require.NoError(t, err)
 
 	// Add a latest tag
-	latestRef := reference.RemoteLatestFromNamed(ref)
+	latestRef := reference.RemoteFromName(ref.Name())
 	err = img.Tag(latestRef.String())
 	require.NoError(t, err)
 	require.Equal(t, []string{headRef.String(), ref.String(), latestRef.String()}, img.Names())
 
 	// Fetch all HEAD tags + the given one (e.g 3.15, 3.14 and latest)
-	ref2, err := reference.RemoteFromString("alpine:3.14")
+	ref2, err := reference.RemoteRefFromString("alpine:3.14")
 	require.NoError(t, err)
 	err = manager.Fetch(ref2, FetchOptions{
 		PullOptions: pullOptions,
@@ -226,7 +226,7 @@ func TestManagerFetch(t *testing.T) {
 	// let's test 3.15
 	img, _, err = manager.rt.LookupImage(ref.String(), nil)
 	require.NoError(t, err)
-	require.Equal(t, []string{reference.LocalHeadFromNamed(ref).String(), ref.String()}, img.Names())
+	require.Equal(t, []string{reference.LocalFromName(ref.Name()).String(), ref.String()}, img.Names())
 
 	// latest now
 	img, _, err = manager.rt.LookupImage(latestRef.String(), nil)
@@ -243,9 +243,9 @@ func TestManagerResolveRelativeReference(t *testing.T) {
 	manager, cleanup := newTestManager(t)
 	defer cleanup()
 
-	ref, err := reference.RemoteFromString("alpine")
+	ref, err := reference.RemoteRefFromString("alpine")
 	require.NoError(t, err)
-	headRef := reference.LocalHeadFromNamed(ref)
+	headRef := reference.LocalFromName(ref.Name())
 
 	// Clone alpine image
 	err = manager.Clone(ref, CloneOptions{
@@ -257,7 +257,7 @@ func TestManagerResolveRelativeReference(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	repo, err := manager.Repository(ref)
+	repo, err := manager.Repository(ref.Name())
 	require.NoError(t, err)
 
 	// Create one commit
@@ -281,7 +281,7 @@ func TestManagerResolveRelativeReference(t *testing.T) {
 			require.NoError(t, err)
 			require.GreaterOrEqual(t, len(commits), 1)
 
-			require.Equal(t, "sha256:"+commits[0].ID(), absRef.AbsoluteReference())
+			require.Equal(t, relRef.Base().Name().String()+reference.IdPrefix+commits[0].ID(), absRef.String())
 		})
 		t.Run("Offset1/HeadBase", func(t *testing.T) {
 			relRef := reference.RelativeFromReferenceAndOffset(headRef, 1)
@@ -292,7 +292,7 @@ func TestManagerResolveRelativeReference(t *testing.T) {
 			require.NoError(t, err)
 			require.GreaterOrEqual(t, len(commits), 2)
 
-			require.Equal(t, "sha256:"+commits[1].ID(), absRef.AbsoluteReference())
+			require.Equal(t, relRef.Base().Name().String()+reference.IdPrefix+commits[1].ID(), absRef.String())
 		})
 	})
 	t.Run("MissingReference", func(t *testing.T) {

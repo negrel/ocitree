@@ -17,9 +17,9 @@ func TestRepositoryAdd(t *testing.T) {
 	manager, cleanup := newTestManager(t)
 	defer cleanup()
 
-	ref, err := reference.RemoteFromString("alpine")
+	ref, err := reference.RemoteRefFromString("alpine")
 	require.NoError(t, err)
-	headRef := reference.LocalHeadFromNamed(ref)
+	headRef := reference.LocalFromName(ref.Name())
 
 	// Clone alpine image
 	err = manager.Clone(ref, CloneOptions{
@@ -31,7 +31,7 @@ func TestRepositoryAdd(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	repo, err := manager.Repository(ref)
+	repo, err := manager.Repository(ref.Name())
 	require.NoError(t, err)
 
 	t.Run("Valid", func(t *testing.T) {
@@ -94,9 +94,9 @@ func TestRepositoryExec(t *testing.T) {
 	manager, cleanup := newTestManager(t)
 	defer cleanup()
 
-	ref, err := reference.RemoteFromString("alpine")
+	ref, err := reference.RemoteRefFromString("alpine")
 	require.NoError(t, err)
-	headRef := reference.LocalHeadFromNamed(ref)
+	headRef := reference.LocalFromName(ref.Name())
 
 	// Clone alpine image
 	err = manager.Clone(ref, CloneOptions{
@@ -108,7 +108,7 @@ func TestRepositoryExec(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	repo, err := manager.Repository(ref)
+	repo, err := manager.Repository(ref.Name())
 	require.NoError(t, err)
 
 	history := getImageHistory(t, manager.rt, headRef.String())

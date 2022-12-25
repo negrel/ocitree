@@ -1,6 +1,7 @@
 package libocitree
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -9,11 +10,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestRebaseSession(t *testing.T) {
+func setupParseRebaseChoicesTest(t *testing.T) (*Manager, func(), *Repository) {
 	manager, cleanup := newTestManager(t)
-	defer cleanup()
 
-	ref, err := reference.RemoteFromString("alpine")
+	ref, err := reference.RemoteRefFromString("alpine")
 	require.NoError(t, err)
 
 	// Clone alpine image
@@ -26,7 +26,41 @@ func TestRebaseSession(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	repo, err := manager.Repository(ref)
+	repo, err := manager.Repository(ref.Name())
+	require.NoError(t, err)
+
+	for i := 0; i < 10; i++ {
+		err = repo.Exec(ExecOptions{
+			Stdin:        nil,
+			Stdout:       nil,
+			Stderr:       nil,
+			Message:      "",
+			ReportWriter: nil,
+		}, "/bin/sh", "-c", fmt.Sprintf("echo $(date +%%s) commit %v >> /root/commits", i))
+		require.NoError(t, err)
+	}
+
+	return manager, cleanup, repo
+}
+
+func TestRebaseSession(t *testing.T) {
+	manager, cleanup := newTestManager(t)
+	defer cleanup()
+
+	ref, err := reference.RemoteRefFromString("alpine")
+	require.NoError(t, err)
+
+	// Clone alpine image
+	err = manager.Clone(ref, CloneOptions{
+		PullOptions: PullOptions{
+			MaxRetries:   0,
+			RetryDelay:   0,
+			ReportWriter: os.Stderr,
+		},
+	})
+	require.NoError(t, err)
+
+	repo, err := manager.Repository(ref.Name())
 	require.NoError(t, err)
 
 	// Add one commit per rebase choice

@@ -13,13 +13,13 @@ import (
 	"github.com/containers/buildah/define"
 	"github.com/containers/common/libimage"
 	"github.com/containers/common/pkg/config"
+	dockerref "github.com/containers/image/v5/docker/reference"
 	storageTransport "github.com/containers/image/v5/storage"
 	"github.com/containers/image/v5/types"
 	"github.com/containers/storage"
 	"github.com/containers/storage/pkg/archive"
 	"github.com/hashicorp/go-multierror"
 	"github.com/negrel/ocitree/pkg/reference"
-	refcomp "github.com/negrel/ocitree/pkg/reference/components"
 	"github.com/sirupsen/logrus"
 )
 
@@ -43,16 +43,16 @@ func (m *Manager) systemContext() *types.SystemContext {
 
 // storageReference implements imageStore
 func (m *Manager) storageReference(ref reference.Reference) types.ImageReference {
-	var named reference.Named
+	var named dockerref.Named
 	var id string
-	// Local and remote reference
-	if namedTagged, isNamedTagged := ref.(reference.NamedTagged); isNamedTagged {
-		named = namedTagged
-	} else { // identifier
-		id = ref.AbsoluteReference()
+
+	if strings.HasPrefix(ref.IdOrTag(), reference.IdPrefix) {
+		id = ref.IdOrTag()[len(reference.IdPrefix):]
+	} else {
+		named = reference.DockerRefFromReference(ref)
 	}
 
-	r, err := storageTransport.Transport.NewStoreReference(m.store, reference.NamedDockerRef(named), id)
+	r, err := storageTransport.Transport.NewStoreReference(m.store, named, id)
 	if err != nil {
 		panic(err)
 	}
@@ -91,10 +91,9 @@ func (m *Manager) diff(from, to *Commit) (io.ReadCloser, error) {
 
 // lookupImage returns the image associated to the given ref.
 func (m *Manager) lookupImage(ref reference.Reference) (*libimage.Image, error) {
-	absref := ref.AbsoluteReference()
 	// Reference with digest/id.
-	if splitted := strings.SplitAfterN(absref, refcomp.IdPrefix, 2); len(splitted) == 2 {
-		id := splitted[1]
+	if strings.HasPrefix(ref.IdOrTag(), reference.IdPrefix) {
+		id := ref.IdOrTag()[len(reference.IdPrefix):]
 		images, err := m.rt.ListImages(context.Background(), nil, &libimage.ListImagesOptions{
 			Filters: []string{"id=" + id},
 		})
@@ -103,7 +102,7 @@ func (m *Manager) lookupImage(ref reference.Reference) (*libimage.Image, error) 
 		}
 	}
 
-	img, _, err := m.rt.LookupImage(absref, &libimage.LookupImageOptions{
+	img, _, err := m.rt.LookupImage(ref.String(), &libimage.LookupImageOptions{
 		Architecture:   runtime.GOARCH,
 		OS:             runtime.GOOS,
 		Variant:        "",
@@ -138,14 +137,14 @@ func NewManagerFromStore(store storage.Store, sysctx *types.SystemContext) (*Man
 
 // Repository returns the repository associated with the given name.
 // An error is returned if local repository is missing or corrupted.
-func (m *Manager) Repository(name refcomp.Named) (*Repository, error) {
+func (m *Manager) Repository(name reference.Name) (*Repository, error) {
 	return newRepositoryFromName(m, name)
 }
 
 // LocalRepositoryExist returns true if a local repository with the given name
 // exist.
-func (m *Manager) LocalRepositoryExist(name refcomp.Named) bool {
-	img, err := m.lookupImage(reference.LocalHeadFromNamed(name))
+func (m *Manager) LocalRepositoryExist(name reference.Name) bool {
+	img, err := m.lookupImage(reference.NewLocal(name, reference.HeadTag))
 	return img != nil && err == nil
 }
 
@@ -168,13 +167,12 @@ func (m *Manager) ResolveRelativeReference(ref reference.Relative) (reference.Re
 	if commit.ID == "" || commit.ID == "<missing>" {
 		return nil, ErrCommitHasNoImageAssociated
 	}
-
-	absRef, err := reference.LocalFromString(commit.ID)
+	id, err := reference.IDFromString(commit.ID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse commit ID: %w", err)
 	}
 
-	return absRef, nil
+	return reference.NewLocal(ref.Base().Name(), id), nil
 }
 
 // Repositories returns the list of repositories
@@ -204,11 +202,11 @@ type CloneOptions struct {
 }
 
 // Clone clones remote repository with the given name to local storage.
-func (m *Manager) Clone(remoteRef reference.RemoteRepository, options CloneOptions) error {
-	headRef := reference.LocalHeadFromNamed(remoteRef)
+func (m *Manager) Clone(remoteRef reference.RemoteRef, options CloneOptions) error {
+	headRef := reference.NewLocal(remoteRef.Name(), reference.HeadTag)
 
 	// Ensure repository doesn't exist
-	if m.LocalRepositoryExist(refcomp.NameFromNamed(remoteRef)) {
+	if m.LocalRepositoryExist(headRef.Name()) {
 		return ErrLocalRepositoryAlreadyExist
 	}
 
@@ -220,7 +218,7 @@ func (m *Manager) Clone(remoteRef reference.RemoteRepository, options CloneOptio
 
 	// Assign HEAD reference
 	img := images[0]
-	err = m.store.AddNames(img.ID(), []string{headRef.AbsoluteReference()})
+	err = m.store.AddNames(img.ID(), []string{headRef.String()})
 	if err != nil {
 		return fmt.Errorf("failed to add HEAD reference to image: %w", err)
 	}
@@ -235,7 +233,7 @@ type PullOptions struct {
 	ReportWriter io.Writer
 }
 
-func (m *Manager) pullRef(ref reference.RemoteRepository, options *PullOptions) ([]*libimage.Image, error) {
+func (m *Manager) pullRef(ref reference.RemoteRef, options *PullOptions) ([]*libimage.Image, error) {
 	return m.rt.Pull(context.Background(), ref.String(), config.PullPolicyNewer, &libimage.PullOptions{
 		CopyOptions: libimage.CopyOptions{
 			SystemContext:                    m.rt.SystemContext(),
@@ -284,14 +282,14 @@ type FetchOptions struct {
 // Fetch fetches multiple version of the given repository reference.
 // It starts by updating every HEAD tags and then finally, it downloads
 // the given remote reference.
-func (m *Manager) Fetch(remoteRef reference.RemoteRepository, options FetchOptions) error {
-	if !m.LocalRepositoryExist(refcomp.NameFromNamed(remoteRef)) {
+func (m *Manager) Fetch(remoteRef reference.RemoteRef, options FetchOptions) error {
+	if !m.LocalRepositoryExist(remoteRef.Name()) {
 		return ErrLocalRepositoryUnknown
 	}
 
 	// List images with same name as repository
 	images, err := m.rt.ListImages(context.Background(), []string{}, &libimage.ListImagesOptions{
-		Filters: []string{"reference=" + remoteRef.Name() + ":*"},
+		Filters: []string{"reference=" + remoteRef.Name().String() + ":*"},
 	})
 	if err != nil {
 		return fmt.Errorf("failed to list references to repository: %w", err)
@@ -303,7 +301,7 @@ func (m *Manager) Fetch(remoteRef reference.RemoteRepository, options FetchOptio
 	for _, img := range images {
 		// Iterate over every name of this image
 		for _, name := range img.Names() {
-			imgRemoteRef, err := reference.RemoteFromString(name)
+			imgRemoteRef, err := reference.RemoteRefFromString(name)
 			// Filter HEAD reference
 			if err != nil {
 				logrus.Debugf("skipping %q because of error: %v", name, err)
@@ -332,12 +330,12 @@ func (m *Manager) Fetch(remoteRef reference.RemoteRepository, options FetchOptio
 	return pullErrs.ErrorOrNil()
 }
 
-func (m *Manager) repoBuilder(ref reference.Named, reportWriter io.Writer) (*buildah.Builder, error) {
+func (m *Manager) repoBuilder(ref reference.Reference, reportWriter io.Writer) (*buildah.Builder, error) {
 	builder, err := buildah.NewBuilder(context.Background(), m.store, buildah.BuilderOptions{
 		Args:                  nil,
-		FromImage:             ref.AbsoluteReference(),
+		FromImage:             ref.String(),
 		ContainerSuffix:       "ocitree",
-		Container:             ref.Name(),
+		Container:             ref.Name().String(),
 		PullPolicy:            buildah.PullNever,
 		Registry:              "",
 		BlobDirectory:         "",

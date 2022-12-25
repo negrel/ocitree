@@ -13,18 +13,22 @@ import (
 	"github.com/containers/common/libimage"
 	"github.com/containers/storage/pkg/archive"
 	"github.com/negrel/ocitree/pkg/reference"
-	refcomp "github.com/negrel/ocitree/pkg/reference/components"
 	"github.com/sirupsen/logrus"
 )
 
 var (
-	ErrUnknownRebaseChoice  = errors.New("unknown rebase choice")
-	interactiveEditHelpText = `#
+	ErrUnknownRebaseChoice   = errors.New("unknown rebase choice")
+	ErrInvalidRebaseCommitID = errors.New("invalid rebase commit id")
+	interactiveEditHelpText  = `#
 # Commands:
 # p, pick <commit> = use commit
 # d, drop <commit> = remove commit
 #
-# These lines can't be re-ordered; they are executed from top to bottom.
+# These lines can be re-ordered; they are executed from top to bottom.
+#
+# If you remove a line here THAT COMMIT WILL BE LOST.
+#
+# However, if you remove everything, the rebase will be aborted.
 #
 `
 )
@@ -70,11 +74,12 @@ func choiceFromString(str string) RebaseChoice {
 // RebaseCommit correspond to a commit and a rebase choice.
 type RebaseCommit struct {
 	Commit
+	index  int
 	Choice RebaseChoice
 }
 
 // RebaseCommits define a read only wrapper over a slice of RebaseCommit.
-// Commits is ordered from newer to older.
+// Commits are initially sorted from newer to older.
 type RebaseCommits struct {
 	commits []RebaseCommit
 }
@@ -93,9 +98,9 @@ func newRebaseCommits(commits Commits, newBaseID string) (RebaseCommits, error) 
 			!commit.WasCreatedByOcitree() || i == len(commits)-1 {
 			break
 		}
-
 		rebaseCommits.commits = append(rebaseCommits.commits, RebaseCommit{
 			Commit: commit,
+			index:  i,
 			Choice: PickRebaseChoice,
 		})
 	}
@@ -106,6 +111,21 @@ func newRebaseCommits(commits Commits, newBaseID string) (RebaseCommits, error) 
 // Get returns the RebaseCommit at the given index.
 func (rc RebaseCommits) Get(i int) *RebaseCommit {
 	return &rc.commits[i]
+}
+
+// GetById returns the RebaseCommit with the given ID prefix.
+func (rc RebaseCommits) GetByID(idprefix string) (*RebaseCommit, int) {
+	if idprefix == "" {
+		return nil, 0
+	}
+
+	for i, c := range rc.commits {
+		if strings.HasPrefix(c.ID(), idprefix) {
+			return &rc.commits[i], i
+		}
+	}
+
+	return nil, 0
 }
 
 // Len returns length of underlying RebaseCommit slice.
@@ -130,18 +150,37 @@ func (rc RebaseCommits) String() string {
 	return builder.String()
 }
 
-func (rc RebaseCommits) parseAndSetChoices(choices string) error {
-	length := rc.Len()
+// Swap swaps commit at index i and j
+func (rc RebaseCommits) Swap(i, j int) {
+	if i != j {
+		rc.commits[i], rc.commits[j] = rc.commits[j], rc.commits[i]
+	}
+}
 
+type parseChoiceError struct {
+	line  string
+	cause error
+}
+
+func newParseChoiceError(line string, cause error) parseChoiceError {
+	return parseChoiceError{line, cause}
+}
+
+// Error implements error.
+func (pce parseChoiceError) Error() string {
+	return fmt.Sprintf("failed to parse line %q: %v", pce.line, pce.cause.Error())
+}
+
+func (rc RebaseCommits) parseChoices(choices string) error {
 	// For each line
-	commitIndex := 0
+	parsedCommitCount := 0
 	for _, line := range strings.Split(choices, "\n") {
 		if line == "" || (len(line) > 0 && line[0] == '#') {
 			continue
 		}
 
 		// Split on space to parse choice
-		splitted := strings.SplitN(line, " ", 2)
+		splitted := strings.SplitN(line, " ", 3)
 		if len(splitted) < 2 {
 			continue
 		}
@@ -150,13 +189,21 @@ func (rc RebaseCommits) parseAndSetChoices(choices string) error {
 		rawChoice := splitted[0]
 		choice := choiceFromString(rawChoice)
 		if choice == UnknownRebaseChoice {
-			return ErrUnknownRebaseChoice
+			return newParseChoiceError(line, ErrInvalidRebaseCommitID)
 		}
 
 		// Set choice
-		commit := rc.Get((length - 1) - commitIndex)
+		rawID := splitted[1]
+		commit, commitIndex := rc.GetByID(rawID)
+		if commit == nil {
+			return newParseChoiceError(line, ErrInvalidRebaseCommitID)
+		}
 		commit.Choice = choice
-		commitIndex++
+
+		// Swap commit order
+		rc.Swap(parsedCommitCount, commitIndex)
+
+		parsedCommitCount++
 	}
 
 	return nil
@@ -164,24 +211,14 @@ func (rc RebaseCommits) parseAndSetChoices(choices string) error {
 
 // RebaseSession define a rebase session of a repository.
 type RebaseSession struct {
-	baseRef    reference.RemoteRepository
 	baseImage  *libimage.Image
 	repository *Repository
 	commits    RebaseCommits
 	runtime    imageRuntime
 }
 
-func newRebaseSession(store imageRuntime, repo *Repository, idtag refcomp.IdentifierOrTag) (*RebaseSession, error) {
-	baseRef, err := reference.RemoteFromNamedAndIdTag(repo.HeadRef(), idtag)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create remote repository reference: %w", err)
-	}
-
-	baseImage, err := store.lookupImage(reference.LocalFromRemote(baseRef))
-	if err != nil {
-		return nil, fmt.Errorf("failed to find new base: %w", err)
-	}
-	err = baseImage.Tag(reference.LocalRebaseFromNamed(baseRef).AbsoluteReference())
+func newRebaseSession(runtime imageRuntime, repo *Repository, baseImage *libimage.Image) (*RebaseSession, error) {
+	err := baseImage.Tag(reference.NewLocal(repo.HeadRef().Name(), reference.RebaseHeadTag).String())
 	if err != nil {
 		return nil, fmt.Errorf("failed add REBASE_HEAD tag to new base: %w", err)
 	}
@@ -197,11 +234,10 @@ func newRebaseSession(store imageRuntime, repo *Repository, idtag refcomp.Identi
 	}
 
 	return &RebaseSession{
-		baseRef:    baseRef,
 		baseImage:  baseImage,
 		repository: repo,
 		commits:    rebaseCommits,
-		runtime:    store,
+		runtime:    runtime,
 	}, nil
 }
 
@@ -251,7 +287,7 @@ func (rs *RebaseSession) Apply() error {
 	}
 
 	// Remove REBASE_HEAD reference
-	err = rs.repository.removeLocalTag(refcomp.RebaseHeadTag)
+	err = rs.repository.removeLocalTag(reference.RebaseHeadTag)
 	if err != nil {
 		return fmt.Errorf("failed to remove rebase head tag: %w", err)
 	}
@@ -340,8 +376,8 @@ func (rs *RebaseSession) pick(builder *buildah.Builder, commit *RebaseCommit) er
 }
 
 // RebaseHead returns reference to rebase head.
-func (rs *RebaseSession) RebaseHead() reference.LocalRepository {
-	return reference.LocalRebaseFromNamed(rs.baseRef)
+func (rs *RebaseSession) RebaseHead() reference.LocalRef {
+	return reference.NewLocal(rs.repository.Name(), reference.RebaseHeadTag)
 }
 
 // create builder from REBASE_HEAD
@@ -393,7 +429,7 @@ func (rs *RebaseSession) InteractiveEdit() error {
 	b, _ := io.ReadAll(f)
 	rawChoices := string(b)
 
-	err = rs.commits.parseAndSetChoices(rawChoices)
+	err = rs.commits.parseChoices(rawChoices)
 	if err != nil {
 		return fmt.Errorf("failed to parse choices: %w", err)
 	}

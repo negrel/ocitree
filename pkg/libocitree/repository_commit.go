@@ -11,9 +11,10 @@ import (
 
 	"github.com/containers/buildah"
 	"github.com/containers/buildah/define"
+	"github.com/containers/common/libimage"
 	"github.com/containers/image/v5/types"
 	"github.com/containers/storage/pkg/archive"
-	refcomp "github.com/negrel/ocitree/pkg/reference/components"
+	"github.com/negrel/ocitree/pkg/reference"
 	"github.com/sirupsen/logrus"
 )
 
@@ -22,6 +23,7 @@ const CommitPrefix = "/bin/sh -c #(ocitree) "
 var (
 	ErrRebaseNothingToRebase    = errors.New("nothing to rebase")
 	ErrRebaseUnknownInstruction = errors.New("unknown instruction")
+	ErrRebaseImageNotPartOfRepo = errors.New("rebase image not part of repository")
 )
 
 // CommitOptions contains options to add a commit to repository.
@@ -220,8 +222,36 @@ func (r *Repository) Exec(options ExecOptions, cmd string, args ...string) error
 }
 
 // RebaseSession starts and returns a new RebaseSession with the given tag as base reference.
-func (r *Repository) RebaseSession(idtag refcomp.IdentifierOrTag) (*RebaseSession, error) {
-	return newRebaseSession(r.runtime, r, idtag)
+func (r *Repository) RebaseSession(ref reference.Reference) (*RebaseSession, error) {
+	baseImage, err := r.runtime.lookupImage(ref)
+	if err != nil {
+		return nil, fmt.Errorf("failed to find new base: %w", err)
+	}
+
+	return r.RebaseSessionByImage(baseImage)
+}
+
+// RebaseSessionByImage starts and returns a new RebaseSession with the given image as new base.
+// An error is returned if the image is not part of the repository.
+func (r *Repository) RebaseSessionByImage(baseImage *libimage.Image) (*RebaseSession, error) {
+	names, err := baseImage.NamedRepoTags()
+	if err != nil {
+		return nil, fmt.Errorf("failed to retrieve named references to new base image: %w", err)
+	}
+
+	basePartOfRepo := false
+	for _, n := range names {
+		if n.Name() == r.Name().String() {
+			basePartOfRepo = true
+			break
+		}
+	}
+
+	if !basePartOfRepo {
+		return nil, ErrRebaseImageNotPartOfRepo
+	}
+
+	return newRebaseSession(r.runtime, r, baseImage)
 }
 
 func commit(builder *buildah.Builder, options CommitOptions, sref types.ImageReference, systemContext *types.SystemContext) error {

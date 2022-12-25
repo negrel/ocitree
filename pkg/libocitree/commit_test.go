@@ -12,7 +12,7 @@ func TestCommitAdd(t *testing.T) {
 	manager, cleanup := newTestManager(t)
 	defer cleanup()
 
-	ref, err := reference.RemoteFromString("alpine")
+	ref, err := reference.RemoteRefFromString("alpine")
 	require.NoError(t, err)
 
 	// Clone alpine image
@@ -25,7 +25,7 @@ func TestCommitAdd(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	repo, err := manager.Repository(ref)
+	repo, err := manager.Repository(ref.Name())
 	require.NoError(t, err)
 
 	// Add directory
@@ -47,7 +47,7 @@ func TestCommitExec(t *testing.T) {
 	manager, cleanup := newTestManager(t)
 	defer cleanup()
 
-	ref, err := reference.RemoteFromString("alpine")
+	ref, err := reference.RemoteRefFromString("alpine")
 	require.NoError(t, err)
 
 	// Clone alpine image
@@ -60,7 +60,7 @@ func TestCommitExec(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	repo, err := manager.Repository(ref)
+	repo, err := manager.Repository(ref.Name())
 	require.NoError(t, err)
 
 	// Add directory
