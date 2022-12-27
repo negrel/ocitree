@@ -65,7 +65,7 @@ func rebase(cmd *cobra.Command, args []string, relRebaseRef reference.Relative) 
 
 	session, err := repo.RebaseSession(rebaseRef)
 	if err != nil {
-		logrus.Errorf("failed to rebase to reference %q: %v", relRebaseRef, err)
+		logrus.Errorf("failed to start rebase session using reference %q: %v", relRebaseRef, err)
 		return 1
 	}
 

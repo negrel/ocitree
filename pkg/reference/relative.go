@@ -97,3 +97,8 @@ func parseOffset(offset string) (uint, error) {
 		return 0, ErrInvalidOffsetFormat
 	}
 }
+
+// String implements fmt.Stringer.
+func (r Relative) String() string {
+	return fmt.Sprintf("%v~%d", r.ref.String(), r.offset)
+}
