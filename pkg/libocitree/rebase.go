@@ -324,6 +324,7 @@ func (rs *RebaseSession) apply() error {
 		commit := rs.commits.Get(i)
 		// drop commit
 		if commit.Choice == DropRebaseChoice {
+			logrus.Infof("dropping commit %v (%v)", i, commit.ID())
 			continue
 		}
 
@@ -335,7 +336,7 @@ func (rs *RebaseSession) apply() error {
 
 		switch commit.Choice {
 		case PickRebaseChoice:
-			logrus.Debugf("picking commit %v (%v)", i, commit.Commit.ID())
+			logrus.Infof("picking commit %v (%v)", i, commit.Commit.ID())
 			err := rs.pick(builder, commit)
 			if err != nil {
 				return fmt.Errorf("failed to pick commit %v (%v): %w", i, commit.Commit.ID(), err)
@@ -429,7 +430,7 @@ func (rs *RebaseSession) InteractiveEdit() error {
 
 	// No commits, nothing to rebase
 	if rs.commits.Len() == 0 {
-		f.WriteString("noop")
+		f.WriteString("noop\n")
 	} else {
 		// Reverse lines so commits are ordered from older to newer
 		f.WriteString(reverseLines(rs.commits.String()))
