@@ -19,6 +19,7 @@ import (
 var (
 	ErrUnknownRebaseChoice   = errors.New("unknown rebase choice")
 	ErrInvalidRebaseCommitID = errors.New("invalid rebase commit id")
+	ErrDuplicateRebaseCommit = errors.New("rebase commit line already parsed")
 	interactiveEditHelpText  = `#
 # Commands:
 # p, pick <commit> = use commit
@@ -81,12 +82,12 @@ type RebaseCommit struct {
 // RebaseCommits define a read only wrapper over a slice of RebaseCommit.
 // Commits are initially sorted from newer to older.
 type RebaseCommits struct {
-	commits []RebaseCommit
+	commits []*RebaseCommit
 }
 
 func newRebaseCommits(commits Commits, newBaseID string) (RebaseCommits, error) {
 	rebaseCommits := RebaseCommits{
-		commits: make([]RebaseCommit, 0, len(commits)),
+		commits: make([]*RebaseCommit, 0, len(commits)),
 	}
 
 	for i, commit := range commits {
@@ -98,11 +99,18 @@ func newRebaseCommits(commits Commits, newBaseID string) (RebaseCommits, error) 
 			!commit.WasCreatedByOcitree() || i == len(commits)-1 {
 			break
 		}
-		rebaseCommits.commits = append(rebaseCommits.commits, RebaseCommit{
+
+		rebaseCommits.commits = append(rebaseCommits.commits, &RebaseCommit{
 			Commit: commit,
 			index:  i,
 			Choice: PickRebaseChoice,
 		})
+	}
+
+	// Reverse commit slice so commits are ordered from older to newer.
+	for i := 0; i < rebaseCommits.Len()/2; i++ {
+		j := rebaseCommits.Len() - (i + 1)
+		rebaseCommits.Swap(i, j)
 	}
 
 	return rebaseCommits, nil
@@ -110,7 +118,7 @@ func newRebaseCommits(commits Commits, newBaseID string) (RebaseCommits, error) 
 
 // Get returns the RebaseCommit at the given index.
 func (rc RebaseCommits) Get(i int) *RebaseCommit {
-	return &rc.commits[i]
+	return rc.commits[i]
 }
 
 // GetById returns the RebaseCommit with the given ID prefix.
@@ -121,7 +129,7 @@ func (rc RebaseCommits) GetByID(idprefix string) (*RebaseCommit, int) {
 
 	for i, c := range rc.commits {
 		if strings.HasPrefix(c.ID(), idprefix) {
-			return &rc.commits[i], i
+			return rc.commits[i], i
 		}
 	}
 
@@ -171,9 +179,13 @@ func (pce parseChoiceError) Error() string {
 	return fmt.Sprintf("failed to parse line %q: %v", pce.line, pce.cause.Error())
 }
 
-func (rc RebaseCommits) parseChoices(choices string) error {
+// ParseChoices parses a multiline strnig where each line contains a choice
+// and a commit ID separated by a space. Empty lines and lines starting with
+// # are ignored.
+func (rc RebaseCommits) ParseChoices(choices string) error {
+	commitParsed := make(map[string]struct{})
+
 	// For each line
-	parsedCommitCount := 0
 	for _, line := range strings.Split(choices, "\n") {
 		if line == "" || (len(line) > 0 && line[0] == '#') {
 			continue
@@ -189,7 +201,7 @@ func (rc RebaseCommits) parseChoices(choices string) error {
 		rawChoice := splitted[0]
 		choice := choiceFromString(rawChoice)
 		if choice == UnknownRebaseChoice {
-			return newParseChoiceError(line, ErrInvalidRebaseCommitID)
+			return newParseChoiceError(line, ErrUnknownRebaseChoice)
 		}
 
 		// Set choice
@@ -198,12 +210,22 @@ func (rc RebaseCommits) parseChoices(choices string) error {
 		if commit == nil {
 			return newParseChoiceError(line, ErrInvalidRebaseCommitID)
 		}
+		if _, alreadyParsed := commitParsed[commit.ID()]; alreadyParsed {
+			return newParseChoiceError(line, ErrDuplicateRebaseCommit)
+		}
+
 		commit.Choice = choice
+		commit, commitIndex = rc.GetByID(rawID)
 
 		// Swap commit order
-		rc.Swap(parsedCommitCount, commitIndex)
+		rc.Swap(len(commitParsed), commitIndex)
 
-		parsedCommitCount++
+		commitParsed[commit.ID()] = struct{}{}
+	}
+
+	// Missing commits are dropped
+	for i := len(commitParsed); i < rc.Len(); i++ {
+		rc.Get(i).Choice = DropRebaseChoice
 	}
 
 	return nil
@@ -429,7 +451,7 @@ func (rs *RebaseSession) InteractiveEdit() error {
 	b, _ := io.ReadAll(f)
 	rawChoices := string(b)
 
-	err = rs.commits.parseChoices(rawChoices)
+	err = rs.commits.ParseChoices(rawChoices)
 	if err != nil {
 		return fmt.Errorf("failed to parse choices: %w", err)
 	}
