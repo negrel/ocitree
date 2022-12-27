@@ -261,9 +261,9 @@ func TestRebaseSession(t *testing.T) {
 		require.Equal(t, PickRebaseChoice, commits.Get(i).Choice, "default rebase choice")
 	}
 
-	// pick commit 2
+	// pick commit 1
 	commits.Get(0).Choice = PickRebaseChoice
-	// drop commit 1
+	// drop commit 2
 	commits.Get(1).Choice = DropRebaseChoice
 
 	// Apply rebase session
@@ -279,8 +279,8 @@ func TestRebaseSession(t *testing.T) {
 	require.NoError(t, err)
 
 	// Check pick & drop
-	require.FileExists(t, filepath.Join(mountpoint, "commit2"))
-	require.NoFileExists(t, filepath.Join(mountpoint, "commit1"))
+	require.FileExists(t, filepath.Join(mountpoint, "commit1"))
+	require.NoFileExists(t, filepath.Join(mountpoint, "commit2"))
 
 	repo.Unmount()
 }
