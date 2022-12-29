@@ -235,15 +235,24 @@ func TestRebaseSession(t *testing.T) {
 		Stdin:        nil,
 		Stdout:       nil,
 		Stderr:       nil,
-		Message:      "empty commit 1",
+		Message:      "commit 1",
 		ReportWriter: nil,
-	}, "/bin/sh", "-c", "touch /commit1")
+	}, "/bin/sh", "-c", "touch /commit1 /commit1.dup")
+	require.NoError(t, err)
+	// Delete one of the file to ensure rebase order is respected.
+	err = repo.Exec(ExecOptions{
+		Stdin:        nil,
+		Stdout:       nil,
+		Stderr:       nil,
+		Message:      "commit 2",
+		ReportWriter: nil,
+	}, "/bin/sh", "-c", "rm -f /commit1.dup")
 	require.NoError(t, err)
 	err = repo.Exec(ExecOptions{
 		Stdin:        nil,
 		Stdout:       nil,
 		Stderr:       nil,
-		Message:      "empty commit 2",
+		Message:      "commit 2",
 		ReportWriter: nil,
 	}, "/bin/sh", "-c", "touch /commit2")
 	require.NoError(t, err)
@@ -254,7 +263,7 @@ func TestRebaseSession(t *testing.T) {
 
 	// Get rebase commits and alter choice
 	commits := session.Commits()
-	require.Equal(t, 2, commits.Len(), "number of commits part of rebase session")
+	require.Equal(t, 3, commits.Len(), "number of commits part of rebase session")
 
 	// Default choice is pick for every commits
 	for i := 0; i < commits.Len(); i++ {
@@ -263,8 +272,10 @@ func TestRebaseSession(t *testing.T) {
 
 	// pick commit 1
 	commits.Get(0).Choice = PickRebaseChoice
-	// drop commit 2
-	commits.Get(1).Choice = DropRebaseChoice
+	// pick commit 2
+	commits.Get(1).Choice = PickRebaseChoice
+	// drop commit 3
+	commits.Get(2).Choice = DropRebaseChoice
 
 	// Apply rebase session
 	err = session.Apply()
@@ -280,6 +291,7 @@ func TestRebaseSession(t *testing.T) {
 
 	// Check pick & drop
 	require.FileExists(t, filepath.Join(mountpoint, "commit1"))
+	require.NoFileExists(t, filepath.Join(mountpoint, "commit1.dup"))
 	require.NoFileExists(t, filepath.Join(mountpoint, "commit2"))
 
 	repo.Unmount()

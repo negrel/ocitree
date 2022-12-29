@@ -320,7 +320,7 @@ func (rs *RebaseSession) Apply() error {
 func (rs *RebaseSession) apply() error {
 	// Execute rebase
 	logrus.Debugf("commits:\n%v", rs.commits)
-	for i := rs.commits.Len() - 1; i >= 0; i-- {
+	for i := 0; i < rs.commits.Len(); i++ {
 		commit := rs.commits.Get(i)
 		// drop commit
 		if commit.Choice == DropRebaseChoice {
