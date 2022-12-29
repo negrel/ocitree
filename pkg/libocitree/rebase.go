@@ -429,14 +429,21 @@ func (rs *RebaseSession) InteractiveEdit() error {
 	defer os.Remove(f.Name())
 
 	// No commits, nothing to rebase
-	if rs.commits.Len() == 0 {
+	switch rs.commits.Len() {
+	case 0:
 		f.WriteString("noop\n")
-	} else {
-		// Reverse lines so commits are ordered from older to newer
-		f.WriteString(reverseLines(rs.commits.String()))
+	case 1:
+		f.WriteString(rs.commits.String())
 		f.WriteString("\n\n")
-		fmt.Fprintf(f, `# Rebase %v..%v onto %v (%v command(s))`,
-			rs.repository.ID()[:8], rs.commits.Get(0).ID()[:8],
+		fmt.Fprintf(f, "# Rebase %v onto %v (1 command)\n",
+			rs.commits.Get(0).ID()[:8],
+			rs.baseImage.ID()[:8])
+
+	default:
+		f.WriteString(rs.commits.String())
+		f.WriteString("\n\n")
+		fmt.Fprintf(f, "# Rebase %v..%v onto %v (%v commands)\n",
+			rs.baseImage.ID()[:8], rs.commits.Get(0).ID()[:8],
 			rs.baseImage.ID()[:8], rs.commits.Len())
 	}
 	f.WriteString(interactiveEditHelpText)
@@ -473,17 +480,4 @@ func edit(file string) error {
 	cmd.Stderr = os.Stderr
 
 	return cmd.Run()
-}
-
-func reverseLines(str string) string {
-	splitted := strings.Split(str, "\n")
-	lastIndex := len(splitted) - 1
-
-	for i := 0; i < len(splitted)/2; i++ {
-		tmp := splitted[i]
-		splitted[i] = splitted[lastIndex-i]
-		splitted[lastIndex-i] = tmp
-	}
-
-	return strings.Join(splitted, "\n")
 }
