@@ -1,8 +1,9 @@
-# :evergreen_tree: `ocitree` - Manage root filesystem as git repositories.
+# :evergreen_tree: `ocitree` - Manage OCI/Docker images as git repositories.
 
 ![push workflow](https://github.com/negrel/ocitree/actions/workflows/push.yaml/badge.svg)
 
-`ocitree` is a tool based on OCI/Docker images technology.
+`ocitree` is a tool to manipulate OCI/Docker images using git like commands (`rebase`, `log`, `checkout`, etc).
+It is inspired by `ostree` but uses OCI/Docker images as storage.
 
 ## Getting started
 
