@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/negrel/ocitree/pkg/libocitree"
 	"github.com/negrel/ocitree/pkg/reference"
@@ -15,6 +16,7 @@ func init() {
 	rootCmd.AddCommand(cloneCmd)
 	flagset := cloneCmd.PersistentFlags()
 	setupStoreOptionsFlags(flagset)
+	flagset.BoolP("idempotent", "i", false, "silence error if repository with already exists")
 }
 
 var cloneCmd = &cobra.Command{
@@ -27,6 +29,8 @@ var cloneCmd = &cobra.Command{
 		if len(args) > 1 {
 			return errors.New("too many arguments specified")
 		}
+		idempotent, _ := cmd.Flags().GetBool("idempotent")
+
 		repoRef, err := reference.RemoteRefFromString(args[0])
 		if err != nil {
 			return err
@@ -51,11 +55,37 @@ var cloneCmd = &cobra.Command{
 				ReportWriter: os.Stderr,
 			},
 		})
+		// Repository already exist, ensure reference point to HEAD
+		if idempotent && err == libocitree.ErrLocalRepositoryAlreadyExist {
+			repo, err := manager.Repository(repoRef.Name())
+			if err != nil {
+				logrus.Errorf("failed to retrieve local repository %q", repoRef)
+				os.Exit(1)
+			}
+
+			// ID reference
+			if strings.HasPrefix(repoRef.IdOrTag(), reference.IdPrefix) {
+				if repo.ID() == repoRef.IdOrTag()[len(reference.IdPrefix):] {
+					goto repoCloned
+				} else {
+					err = fmt.Errorf("HEAD of repository point to another commit: %v", err)
+				}
+			} else {
+				// Tag reference
+				otherTags := repo.OtherHeadTags()
+				for _, t := range otherTags {
+					if t.Tag() == repoRef.IdOrTag()[len(reference.TagPrefix):] {
+						goto repoCloned
+					}
+				}
+			}
+		}
 		if err != nil {
 			logrus.Errorf("failed to clone repository %q: %v", repoRef, err)
 			os.Exit(1)
 		}
 
+	repoCloned:
 		fmt.Printf("Repository %q successfully cloned.\n", repoRef.Name())
 
 		return nil
