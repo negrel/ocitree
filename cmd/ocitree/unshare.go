@@ -40,10 +40,6 @@ func runUnshare(cobraCmd *cobra.Command, args []string) error {
 		args = []string{shell}
 	}
 
-	logrus.Debug("entering modified user namespace...")
-	unshare.MaybeReexecUsingUserNamespace(false)
-	logrus.Debugf("modified user namespace successfully entered, executing %v in a modified user namespace...", args)
-
 	cmd := exec.Command(args[0], args[1:]...)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout

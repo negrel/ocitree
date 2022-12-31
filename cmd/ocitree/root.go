@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/containers/storage/pkg/reexec"
+	"github.com/containers/storage/pkg/unshare"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )
@@ -22,6 +23,12 @@ var rootCmd = &cobra.Command{
 func Execute() {
 	if reexec.Init() {
 		return
+	}
+
+	if isRootless := unshare.IsRootless(); isRootless {
+		logrus.Debug("entering modified user namespace...")
+		unshare.MaybeReexecUsingUserNamespace(false)
+		logrus.Debugf("modified user namespace successfully entered.")
 	}
 
 	if err := rootCmd.Execute(); err != nil {
