@@ -149,7 +149,7 @@ func (rc RebaseCommits) String() string {
 		builder.WriteString(c.Choice.String())
 		builder.WriteString(" ")
 		builder.WriteString(c.Commit.ID()[:8] + " ")
-		builder.WriteString(c.Commit.Comment())
+		builder.WriteString(c.Commit.Message())
 		if i != rc.Len()-1 {
 			builder.WriteString("\n")
 		}
@@ -349,7 +349,7 @@ func (rs *RebaseSession) apply() error {
 		// Commit rebase head
 		err = rs.commitRebaseHead(builder, CommitOptions{
 			CreatedBy:    commit.CreatedBy()[len(CommitPrefix):],
-			Message:      commit.Comment(),
+			Message:      commit.Message(),
 			ReportWriter: os.Stderr,
 		})
 		if err != nil {

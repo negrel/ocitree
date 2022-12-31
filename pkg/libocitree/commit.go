@@ -80,8 +80,8 @@ func (c *Commit) ID() string {
 	return c.history.ID
 }
 
-// Comment returns the comment associated to this commit.
-func (c *Commit) Comment() string {
+// Message returns the message associated to this commit.
+func (c *Commit) Message() string {
 	if splitted := strings.Split(c.history.Comment, "\nFROM"); len(splitted) != 1 {
 		return splitted[0]
 	}

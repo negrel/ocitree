@@ -62,7 +62,7 @@ var logCmd = &cobra.Command{
 		for _, commit := range commits {
 			fmt.Printf("commit %v (%v) %v\n", commit.ID(), units.BytesSize(float64(commit.Size())), commit.Tags())
 			fmt.Printf("Date %v\n", commit.CreationDate().Format(time.RubyDate))
-			if comment := commit.Comment(); comment != "" {
+			if comment := commit.Message(); comment != "" {
 				fmt.Printf("	%v\n", comment)
 			}
 			fmt.Printf("	%v\n\n", commit.CreatedBy())
