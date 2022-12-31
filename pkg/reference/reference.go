@@ -228,7 +228,7 @@ func IDFromString(id string) (ID, error) {
 
 // IDFromDigested returns an ID from the given digest.
 func IDFromDigest(d digest.Digest) ID {
-	id := d.String()
+	id := IdPrefix + d.Encoded()
 
 	return ID{id}
 }
